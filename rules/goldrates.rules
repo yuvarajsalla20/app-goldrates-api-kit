@@ -7,6 +7,12 @@
       allow write: if false;
     }
 
+    // Five rows per day (one per metal and purity): same as daily_rates.
+    match /daily_rate_rows/{rowId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
     // Manual override: admin only (Firebase console or admin SDK).
     match /config/goldrates {
       allow read, write: if false;

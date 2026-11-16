@@ -22,6 +22,7 @@ function deps(now: string, fetchRates: JobDeps['fetchRates']): JobDeps {
     now: () => new Date(now),
     ...firestoreStore(db),
     fetchRates,
+    readPremium: async () => ({ gold_pct: 1.3, silver_pct: 1.3 }),
     publish: async (latest) => void published.push(latest),
     alert: () => undefined,
     logError: (message) => {
@@ -34,6 +35,7 @@ beforeEach(async () => {
   published.length = 0;
   await db.recursiveDelete(db.collection('daily_rates'));
   await db.recursiveDelete(db.collection('config'));
+  await db.recursiveDelete(db.collection('daily_rate_rows'));
 });
 
 describe('job on the Firestore emulator', () => {
@@ -49,6 +51,11 @@ describe('job on the Firestore emulator', () => {
 
     const latest = (await db.doc('daily_rates/latest').get()).data()!;
     expect(latest).toMatchObject({ rate_date: '2026-11-16', stale: false, last_error: null });
+
+    const rows = await db.collection('daily_rate_rows').where('rate_date', '==', '2026-11-16').get();
+    expect(rows.size).toBe(5);
+    expect((await db.doc('daily_rate_rows/2026-11-16_gold_22K').get()).data()).toMatchObject({ metal: 'gold', purity: '22K', api_price: 12449.72, premium_pct: 1.3, market_price: 12611.57 });
+    expect((await db.doc('daily_rate_rows/2026-11-16_gold_22K').get()).data()!.created_at).toBeInstanceOf(Timestamp);
     expect(published[0].created_at).toBe('2026-11-15T23:30:00.000Z');
   });
 
@@ -75,6 +82,9 @@ describe('job on the Firestore emulator', () => {
       }),
     );
     expect(result).toMatchObject({ ok: true, source: 'MANUAL' });
+    // A second run the same day replaces the five rows, never adds more.
+    await runDailyRates(deps('2026-11-15T23:45:00Z', async () => parseLatestResponse(success)));
+    expect((await db.collection('daily_rate_rows').get()).size).toBe(5);
     expect((await db.doc('daily_rates/2026-11-16').get()).data()).toMatchObject({ source: 'MANUAL', benchmark: 'GoodReturns', gold_24k: 13600 });
   });
 });

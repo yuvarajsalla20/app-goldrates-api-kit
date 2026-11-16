@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SANITY_LIMIT = exports.PURITY_FACTORS = void 0;
+exports.hasPremium = exports.MAX_PREMIUM_PCT = exports.NO_PREMIUM = exports.SANITY_LIMIT = exports.PURITY_FACTORS = void 0;
 exports.round2 = round2;
 exports.convertPurities = convertPurities;
 exports.isPositive = isPositive;
@@ -8,6 +8,8 @@ exports.sanityCheck = sanityCheck;
 exports.rateField = rateField;
 exports.rateFor = rateFor;
 exports.valueOf = valueOf;
+exports.parsePremiumPct = parsePremiumPct;
+exports.applyPremium = applyPremium;
 /** Purity factors (BIS hallmark grades). 24K and 999 are the base rates. */
 exports.PURITY_FACTORS = {
     gold: { '24K': 1, '22K': 0.9167, '18K': 0.75 },
@@ -91,4 +93,41 @@ function valueOf(rates, item, options = {}) {
         throw new Error('grams must be zero or more');
     const premium = 1 + (options.premiumPct ?? 0) / 100;
     return round2(item.grams * rateFor(rates, item.metal, item.purity) * premium);
+}
+/** No premium: plain IBJA. */
+exports.NO_PREMIUM = { gold_pct: 0, silver_pct: 0 };
+/** A premium above this is treated as a typo and ignored. */
+exports.MAX_PREMIUM_PCT = 10;
+/** True when either metal has a premium. */
+const hasPremium = (premium) => !!premium && (premium.gold_pct !== 0 || premium.silver_pct !== 0);
+exports.hasPremium = hasPremium;
+/**
+ * Reads one premium value (a Remote Config string or number). Empty, not a
+ * number, below 0 or above {@link MAX_PREMIUM_PCT} → `fallback`.
+ */
+function parsePremiumPct(value, fallback = 0) {
+    if (value === null || value === undefined || value === '')
+        return fallback;
+    const pct = typeof value === 'number' ? value : Number(String(value).trim());
+    if (!Number.isFinite(pct) || pct < 0 || pct > exports.MAX_PREMIUM_PCT)
+        return fallback;
+    return pct;
+}
+/**
+ * The same rates with the premium added to every purity, rounded to 2
+ * decimals. Every other field (date, source, usd_inr…) is kept as it is.
+ */
+function applyPremium(rates, premium) {
+    if (!(0, exports.hasPremium)(premium))
+        return rates;
+    const gold = 1 + premium.gold_pct / 100;
+    const silver = 1 + premium.silver_pct / 100;
+    return {
+        ...rates,
+        gold_24k: round2(rates.gold_24k * gold),
+        gold_22k: round2(rates.gold_22k * gold),
+        gold_18k: round2(rates.gold_18k * gold),
+        silver_999: round2(rates.silver_999 * silver),
+        silver_925: round2(rates.silver_925 * silver),
+    };
 }

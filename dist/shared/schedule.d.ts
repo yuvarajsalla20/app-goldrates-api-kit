@@ -1,5 +1,13 @@
-/** Cron for the daily job: 5:00 AM, Monday to Friday. */
-export declare const SCHEDULE = "0 5 * * 1-5";
+/**
+ * Cron for the daily job: 5:00 AM, Monday to Friday, plus 3 retry slots an hour apart (6, 7 and 8 AM). A retry slot
+ * calls the API only when that day's 5 AM run failed with a temporary problem (see `runDailyRates`); on a normal day
+ * it does nothing.
+ */
+export declare const SCHEDULE = "0 5-8 * * 1-5";
+/** IST hours of the retry slots; the last one is the final try of the day. */
+export declare const RETRY_HOURS_IST: readonly [6, 7, 8];
+/** Which run of the day an IST moment is: the 5 AM run, a retry, or the day's final retry. Other hours (a manual "Force run") count as a first run. */
+export declare function runKind(now: Date): 'first' | 'retry' | 'final';
 /** Time zone of {@link SCHEDULE}. */
 export declare const TIME_ZONE = "Asia/Kolkata";
 /** Hour (IST) the job runs. */

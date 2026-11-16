@@ -1,3 +1,9 @@
+/**
+ * The daily job's logic, with every outside service passed in, so it can be
+ * tested without Firebase. `index.ts` wires it to Firestore, Remote Config,
+ * the Metals.dev secret and the scheduler.
+ */
+import { type Premium } from '../shared/rates';
 import type { DailyRate, LatestRate } from '../shared/types';
 import { type MetalsDevRates } from './metalsDev';
 /** `config/goldrates`. Empty or null fields mean "use the API". */
@@ -25,6 +31,11 @@ export interface JobDeps {
     now: () => Date;
     readConfig: () => Promise<ManualConfig | null>;
     readLatest: () => Promise<LatestRate | null>;
+    /**
+     * The market premium in effect now (Remote Config), saved on the day's row with
+     * the resulting market prices. Optional: without it the row records 0%.
+     */
+    readPremium?: () => Promise<Premium>;
     /** Calls Metals.dev. Throws {@link MetalsDevError} on failure. */
     fetchRates: () => Promise<MetalsDevRates>;
     /** Creates or replaces `daily_rates/{rate_date}`. */
@@ -40,6 +51,9 @@ export interface JobDeps {
 }
 export type JobResult = {
     ok: true;
+    skipped: string;
+} | {
+    ok: true;
     source: DailyRate['source'];
     row: DailyRate;
     recovered: boolean;
@@ -48,5 +62,12 @@ export type JobResult = {
     error: string;
     showing: LatestRate | null;
 };
-/** One run of the 5 AM job. Never throws: every problem ends in the result and the logs. */
+/**
+ * One run of the job. Never throws: every problem ends in the result and the logs.
+ *
+ * The 5 AM run (and any manual "Force run") always runs. A retry slot (6, 7 and 8 AM IST) runs only when today
+ * has no good rate yet and the last failure was temporary, or a manual rate has been set since; otherwise it is
+ * skipped without calling the API. Emails: on the 5 AM failure, on the final (8 AM) failure, and when a run
+ * succeeds after a failure.
+ */
 export declare function runDailyRates(deps: JobDeps): Promise<JobResult>;

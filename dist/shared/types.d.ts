@@ -25,6 +25,18 @@ export interface DailyRate extends Rates {
     unchanged: boolean;
     /** When the row was saved (ISO). */
     created_at: string;
+    /**
+     * Market premium (%) in effect when the job saved this row, from Remote Config.
+     * Missing on rows saved before v1.1.0.
+     */
+    premium_gold_pct?: number;
+    premium_silver_pct?: number;
+    /** The API price + the premium (₹/g): `gold_24k × (1 + premium_gold_pct / 100)`, and so on. Missing before v1.1.0. */
+    market_gold_24k?: number;
+    market_gold_22k?: number;
+    market_gold_18k?: number;
+    market_silver_999?: number;
+    market_silver_925?: number;
 }
 /**
  * `daily_rates/latest`, and the JSON in the Remote Config parameter
@@ -35,6 +47,8 @@ export interface LatestRate extends DailyRate {
     stale: boolean;
     /** `"1203: quota exceeded"` style text, or null after a good run. */
     last_error: string | null;
+    /** Just the code of `last_error` (`1203`, `NETWORK`…), so a retry can tell a temporary problem from a lasting one. */
+    last_error_code?: string | null;
     /** When the job last ran (ISO), good or bad. */
     last_attempt_at: string;
 }
@@ -42,6 +56,9 @@ export type Metal = 'gold' | 'silver';
 export type GoldPurity = '24K' | '22K' | '18K';
 export type SilverPurity = '999' | '925';
 export type Purity = GoldPurity | SilverPurity;
+/** Remote Config parameters with the market premium (%), one per metal. Set by the owner, read by the app. */
+export declare const PREMIUM_GOLD_KEY = "goldrates_premium_gold_pct";
+export declare const PREMIUM_SILVER_KEY = "goldrates_premium_silver_pct";
 /** Name of the Remote Config parameter the job publishes. */
 export declare const REMOTE_CONFIG_KEY = "goldrates_latest";
 /** Firestore collection with one row per weekday plus `latest`. */

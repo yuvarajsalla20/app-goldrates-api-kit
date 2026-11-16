@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.goldRatesDaily = exports.METALS_DEV_API_KEY = exports.parseLatestResponse = exports.fetchLatestRates = exports.MetalsDevError = exports.METALS_DEV_ERRORS = exports.runDailyRates = exports.alertMessage = exports.KIT_VERSION = exports.KIT_NAME = void 0;
+exports.goldRatesDaily = exports.METALS_DEV_API_KEY = exports.parseLatestResponse = exports.fetchLatestRates = exports.MetalsDevError = exports.METALS_DEV_ERRORS = exports.runDailyRates = exports.alertMessage = exports.toPurityRows = exports.purityRowId = exports.PURITY_ROWS_COLLECTION = exports.KIT_VERSION = exports.KIT_NAME = void 0;
 exports.logAlert = logAlert;
 exports.createGoldRatesDaily = createGoldRatesDaily;
 /**
@@ -53,6 +53,10 @@ const metalsDev_1 = require("./metalsDev");
 var kit_1 = require("../shared/kit");
 Object.defineProperty(exports, "KIT_NAME", { enumerable: true, get: function () { return kit_1.KIT_NAME; } });
 Object.defineProperty(exports, "KIT_VERSION", { enumerable: true, get: function () { return kit_1.KIT_VERSION; } });
+var rows_1 = require("../shared/rows");
+Object.defineProperty(exports, "PURITY_ROWS_COLLECTION", { enumerable: true, get: function () { return rows_1.PURITY_ROWS_COLLECTION; } });
+Object.defineProperty(exports, "purityRowId", { enumerable: true, get: function () { return rows_1.purityRowId; } });
+Object.defineProperty(exports, "toPurityRows", { enumerable: true, get: function () { return rows_1.toPurityRows; } });
 var alertMessage_2 = require("./alertMessage");
 Object.defineProperty(exports, "alertMessage", { enumerable: true, get: function () { return alertMessage_2.alertMessage; } });
 var job_2 = require("./job");
@@ -96,7 +100,8 @@ function createGoldRatesDaily(options = {}) {
             now: () => new Date(),
             ...store,
             fetchRates: () => (0, metalsDev_1.fetchLatestRates)(exports.METALS_DEV_API_KEY.value()),
-            publish: firebase_1.publishToRemoteConfig,
+            readPremium: () => (0, firebase_1.readPremiumFromRemoteConfig)(options.premiumDefault),
+            publish: (latest) => (0, firebase_1.publishToRemoteConfig)(latest, options.premiumDefault),
             alert: async (alert) => {
                 const message = (0, alertMessage_1.alertMessage)(alert);
                 logAlert(alert, message);
@@ -104,7 +109,10 @@ function createGoldRatesDaily(options = {}) {
             },
             logError: (message, detail) => logger.error(message, { detail: String(detail?.message ?? detail) }),
         });
-        if (result.ok) {
+        if (result.ok && 'skipped' in result) {
+            logger.info('GOLDRATE_RETRY_SKIPPED', { reason: result.skipped });
+        }
+        else if (result.ok) {
             logger.info('GOLDRATE_SAVED', { rate_date: result.row.rate_date, source: result.source, gold_24k: result.row.gold_24k, silver_999: result.row.silver_999 });
         }
     });

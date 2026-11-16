@@ -57,7 +57,7 @@ Deploy:
 cd functions; npm install; cd ..; firebase deploy --only functions --project personal-assests-locker
 ```
 
-That creates a Cloud Scheduler job `firebase-schedule-goldRatesDaily-asia-south1` that runs at 5:00 AM IST, Monday to Friday. No retries.
+That creates a Cloud Scheduler job `firebase-schedule-goldRatesDaily-asia-south1` that wakes at 5, 6, 7 and 8 AM IST, Monday to Friday. Only the 5 AM run calls the API on a normal day; the others retry only after a failure.
 
 **Run it by hand** (to test, or after setting a manual rate): Google Cloud console › Cloud Scheduler › the job › **Force run**. A second run on the same day replaces that day's row. Every run uses one Metals.dev call (100 a month on the free plan).
 
@@ -96,7 +96,7 @@ The email is sent by a **Cloud Monitoring log-based alert** (decided 16 Nov 2026
 2. **Logging › Logs Explorer**, run this query:
    `resource.type="cloud_run_revision" AND jsonPayload.message="GOLDRATE_API_FAILED"`
 3. **Actions › Create log alert**. Name it `Gold rate API failed`. In the documentation box write: "The daily gold rate job failed. Open the log entry for the error, what to do and the rate the app shows."
-4. Notification frequency: **once per day** (one run a day anyway). Incident autoclose: 1 day. Choose your email channel. Save.
+4. Notification frequency: **every 1 hour** (a bad day sends at most two failure emails: 5 AM and 8 AM). Incident autoclose: 1 day. Choose your email channel. Save.
 5. Repeat steps 2–4 with `GOLDRATE_API_RECOVERED` and the name `Gold rate API working again` for the recovery email.
 
 The email links to the log entry, which holds the full `subject` and `text` (error code, what to do, the rate the app is showing, how to set a manual rate).
@@ -131,7 +131,15 @@ import { getRatesForDate } from 'app-goldrates-api-kit';
 const row = await getRatesForDate((c, id) => getDoc(doc(db, c, id)).then((s) => s.data() ?? null), '2026-11-14');
 ```
 
-## 8. First-week checks
+## 8. Market premium
+
+Two Remote Config parameters, the same for every user: `goldrates_premium_gold_pct` and `goldrates_premium_silver_pct` (% added to IBJA, 0 to 10).
+
+- If the app's function passes `premiumDefault`, the next 5 AM run creates both with that value. Otherwise add them yourself: Firebase console › Remote Config › **Add parameter**, type **Number**.
+- To change: Firebase console › Remote Config › click the value › type the new % › **Save** › **Publish changes**. No deployment, no app update.
+- Never show the % in the app (see the README's Market premium section).
+
+## 9. First-week checks
 
 - Compare `daily_rates/{date}.gold_24k` with IBJA's published 999 rate on ibja.co for a few days.
 - Confirm Metals.dev holds the previous working day's closing rate at 5 AM.

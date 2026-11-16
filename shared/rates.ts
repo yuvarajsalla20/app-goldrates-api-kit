@@ -89,3 +89,52 @@ export function valueOf(
   const premium = 1 + (options.premiumPct ?? 0) / 100;
   return round2(item.grams * rateFor(rates, item.metal, item.purity) * premium);
 }
+
+/**
+ * Market premium: % added on top of IBJA when values are shown (shops quote a
+ * little above the IBJA benchmark). Stored rates always stay plain IBJA.
+ */
+export interface Premium {
+  /** % added to every gold purity, e.g. 1.3. */
+  gold_pct: number;
+  /** % added to every silver purity. */
+  silver_pct: number;
+}
+
+/** No premium: plain IBJA. */
+export const NO_PREMIUM: Premium = { gold_pct: 0, silver_pct: 0 };
+/** A premium above this is treated as a typo and ignored. */
+export const MAX_PREMIUM_PCT = 10;
+
+/** True when either metal has a premium. */
+export const hasPremium = (premium: Premium | null | undefined): premium is Premium =>
+  !!premium && (premium.gold_pct !== 0 || premium.silver_pct !== 0);
+
+/**
+ * Reads one premium value (a Remote Config string or number). Empty, not a
+ * number, below 0 or above {@link MAX_PREMIUM_PCT} → `fallback`.
+ */
+export function parsePremiumPct(value: unknown, fallback = 0): number {
+  if (value === null || value === undefined || value === '') return fallback;
+  const pct = typeof value === 'number' ? value : Number(String(value).trim());
+  if (!Number.isFinite(pct) || pct < 0 || pct > MAX_PREMIUM_PCT) return fallback;
+  return pct;
+}
+
+/**
+ * The same rates with the premium added to every purity, rounded to 2
+ * decimals. Every other field (date, source, usd_inr…) is kept as it is.
+ */
+export function applyPremium<T extends Omit<Rates, 'usd_inr'>>(rates: T, premium: Premium | null | undefined): T {
+  if (!hasPremium(premium)) return rates;
+  const gold = 1 + premium.gold_pct / 100;
+  const silver = 1 + premium.silver_pct / 100;
+  return {
+    ...rates,
+    gold_24k: round2(rates.gold_24k * gold),
+    gold_22k: round2(rates.gold_22k * gold),
+    gold_18k: round2(rates.gold_18k * gold),
+    silver_999: round2(rates.silver_999 * silver),
+    silver_925: round2(rates.silver_925 * silver),
+  };
+}

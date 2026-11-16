@@ -1,4 +1,4 @@
-import { isPositive } from '../shared/rates';
+import { NO_PREMIUM, applyPremium, isPositive, type Premium } from '../shared/rates';
 import { OUTDATED_WORKING_DAYS, latestScheduledRunDate, workingDaysBetween } from '../shared/schedule';
 import type { LatestRate } from '../shared/types';
 
@@ -12,8 +12,12 @@ export type RateState = 'none' | 'current' | 'behind' | 'outdated';
 
 export interface RateStatus {
   state: RateState;
-  /** The rate, or null when `state` is `none`. */
+  /** The rate to show and value with: IBJA plus the premium. Null when `state` is `none`. */
   rates: LatestRate | null;
+  /** The plain IBJA rate, as stored. Equal to `rates` when there is no premium. */
+  ibja: LatestRate | null;
+  /** The premium included in `rates` (0 / 0 = plain IBJA). */
+  premium: Premium;
   /** `YYYY-MM-DD` of the rate shown, for "as of 14 Nov". */
   rateDate: string | null;
   /** True for `behind` and `outdated`: show a warning next to the rate. */
@@ -38,12 +42,12 @@ export function parseLatest(json: string | null | undefined): LatestRate | null 
   }
 }
 
-/** Decides what the app shows for a rate at a given moment. */
-export function rateStatus(latest: LatestRate | null, now: Date = new Date()): RateStatus {
-  if (!latest) return { state: 'none', rates: null, rateDate: null, stale: false, daysBehind: 0 };
+/** Decides what the app shows for a rate at a given moment, with the market premium added. */
+export function rateStatus(latest: LatestRate | null, now: Date = new Date(), premium: Premium = NO_PREMIUM): RateStatus {
+  if (!latest) return { state: 'none', rates: null, ibja: null, premium, rateDate: null, stale: false, daysBehind: 0 };
   const expected = latestScheduledRunDate(now);
   const daysBehind = workingDaysBetween(latest.rate_date, expected);
   const behind = daysBehind > 0 || latest.stale === true;
   const state: RateState = daysBehind >= OUTDATED_WORKING_DAYS ? 'outdated' : behind ? 'behind' : 'current';
-  return { state, rates: latest, rateDate: latest.rate_date, stale: state !== 'current', daysBehind };
+  return { state, rates: applyPremium(latest, premium), ibja: latest, premium, rateDate: latest.rate_date, stale: state !== 'current', daysBehind };
 }

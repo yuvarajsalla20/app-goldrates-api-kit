@@ -1,9 +1,9 @@
 # app-goldrates-api-kit
 
 Daily **India gold and silver rates** (IBJA benchmark) for Expo + Firebase apps.
-It fetches **once a day at 5:00 AM IST, Monday to Friday**, converts the rates to 24K / 22K / 18K gold and 999 / 925 silver per gram in ₹, stores one row per day, and gives the app a simple way to read the latest rate.
+It fetches **once a day at 5:00 AM IST, Monday to Friday** (retrying up to 3 times, an hour apart, only if that fails), converts the rates to 24K / 22K / 18K gold and 999 / 925 silver per gram in ₹, stores one row per day, and gives the app a simple way to read the latest rate.
 
-> Status: **v1.0.0 built.** Setup steps: [docs/setup.md](docs/setup.md). What is still open: [Open decisions](#open-decisions).
+> Status: **v1.1.0** (adds the market premium). Setup steps: [docs/setup.md](docs/setup.md). What is still open: [Open decisions](#open-decisions).
 
 Part of the shared kits:
 [app-core-kit](https://github.com/yuvarajsalla20/app-core-kit) ·
@@ -76,7 +76,7 @@ Everything else is built into the kit (see [Fixed settings](#fixed-settings)).
 
 Do **not** use `metals.gold` / `metals.silver`. Those are world spot prices, about 15% below Indian rates.
 
-Plan: the free plan gives 100 calls a month, and the kit uses about 22 (one per weekday). Metals.dev's terms link commercial use to an active paid subscription, so move to the paid plan ($1.79/month) if needed. Only the key changes.
+Plan: the free plan gives 100 calls a month. A normal month uses about 22 (one per weekday); even with all 3 retries every day it would be 88. Metals.dev's terms link commercial use to an active paid subscription, so move to the paid plan ($1.79/month) if needed. Only the key changes.
 
 ---
 
@@ -95,12 +95,15 @@ Rounded to 2 decimals (half up), so 18K on 14 Nov 2026 is 13,581.02 × 0.75 = 10
 ## Daily job (Cloud Function)
 
 **Yes, it is a scheduled job.** The kit ships it as a **Firebase scheduled Cloud Function** (Cloud Scheduler runs it):
-- Schedule: `0 5 * * 1-5` with time zone `Asia/Kolkata` (5:00 AM IST, Mon–Fri).
+- Schedule: `0 5-8 * * 1-5` with time zone `Asia/Kolkata`: the 5:00 AM IST run, plus retry slots at 6, 7 and 8 AM (Mon–Fri). One Cloud Scheduler job.
 - Deploy once with `firebase deploy --only functions`. After that it runs by itself, with no server to manage.
-- Needs the Firebase **Blaze (pay-as-you-go)** plan. Cost at this volume is about ₹0: Cloud Scheduler gives 3 free jobs per account, and 22 runs a month is far inside the Functions free tier.
+- Needs the Firebase **Blaze (pay-as-you-go)** plan. Cost at this volume is about ₹0: Cloud Scheduler gives 3 free jobs per account, and about 88 runs a month (most of them retry slots that stop straight away) is far inside the Functions free tier.
 
 
-- Runs **once a day at 5:00 AM IST, Monday to Friday**. **No calls on Saturday or Sunday.** No retries: exactly one call per day.
+- Runs **once a day at 5:00 AM IST, Monday to Friday**. **No calls on Saturday or Sunday.**
+- **Retries, only after a failure (decided 16 Nov 2026):** if the 5 AM run fails, the job tries again at **6, 7 and 8 AM IST**: at most 3 retries, an hour apart. It stops as soon as one succeeds. On a normal day the retry slots wake up, see that today already has a rate, and stop **without calling the API**, so a normal day is still exactly one call.
+  - Only temporary problems are retried: network error, timeout, 5xx, an odd answer, a failed sanity check. Lasting problems (1101 bad key, 1201/1202 account, 1203 quota, 21xx kit bugs) are not retried, because they would fail the same way and use up calls. Exception: if you set a manual rate after the failure, the next retry slot uses it.
+  - A manual "Force run" at any other hour always runs.
 - At 5 AM the API returns the previous working day's IBJA closing rate. `rate_date` is the date the job ran (the day this rate is shown), and `rate_time` keeps the API's own timestamp.
 - Steps:
   1. If a **manual rate** is set in `config/goldrates`, use it (`source = MANUAL`).
@@ -112,7 +115,7 @@ Rounded to 2 decimals (half up), so 18K on 14 Nov 2026 is 13,581.02 × 0.75 = 10
   1. keeps the **previous date's rate** as `latest` (with its original `rate_date`),
   2. sets `stale: true`, `last_error` (e.g. `"1203: quota exceeded"`) and `last_attempt_at`,
   3. still publishes that rate to Remote Config, so the app always has a rate and its date,
-  4. **sends a failure email** (see [Failure email](#failure-email-important)). There's no retry. The next morning's run (or a manual rate) fixes it, and `stale` goes back to `false`.
+  4. **sends a failure email** (see [Failure email](#failure-email-important)). The retries at 6, 7 and 8 AM (or a manual rate, or the next morning's run) fix it, and `stale` goes back to `false`.
 - Backfill of missed weekdays: **only if** a test confirms the timeseries endpoint returns IBJA prices (its docs only show spot gold/silver). Otherwise a missed day simply has no row.
 
 ### Error handling
@@ -130,7 +133,7 @@ Every Metals.dev response has `status` (`success` / `failure`). A failure also h
 | 2103 | Unsupported currency | No retry. Alert (kit bug). |
 | 2104 | Invalid date format (`YYYY-MM-DD`) | No retry. Alert (kit bug). |
 | 2105 | Date range invalid or too long | Split the backfill into ≤30-day chunks. |
-| network / timeout / 5xx | Temporary | No retry. Keep the last rate; the next day's run tries again. |
+| network / timeout / 5xx | Temporary | Keep the last rate. Retried at 6, 7 and 8 AM IST; then the next day's run. |
 
 ---
 
@@ -139,7 +142,7 @@ Every Metals.dev response has `status` (`success` / `failure`). A failure also h
 **Whenever the API call fails, the job sends an email.**
 
 - **To:** the address in config `ALERT_EMAIL` (the owner's own address, set in the Firebase project; it is never written in this repo). *To confirm with the owner.*
-- **When:** every failed run: any error code, network error/timeout, or a failed sanity check (zero or more than a 10% jump). At most one email per day, because there's one run per day.
+- **When:** the 5 AM run fails (any error code, network error/timeout, or a failed sanity check: zero or more than a 10% jump), and again if the last retry at 8 AM also fails. The 6 and 7 AM retries stay quiet. At most two failure emails a day.
 - **Subject:** `⚠️ Gold rate API failed – <date>`
 - **Body:**
   - date and time of the run (IST)
@@ -186,6 +189,33 @@ Every Metals.dev response has `status` (`success` / `failure`). A failure also h
 | `rate_time` | timestamp | from `timestamps.metal` (null for manual) |
 | `unchanged` | boolean | true when the price equals the previous row (e.g. IBJA holiday) |
 | `created_at` | timestamp | when saved |
+| `premium_gold_pct` | number (%) | 1.3 (market premium in Remote Config when the job ran) |
+| `premium_silver_pct` | number (%) | 1.3 |
+| `market_gold_24k` | number (₹/g) | 13757.57 (= `gold_24k` + premium) |
+| `market_gold_22k` | number (₹/g) | 12611.57 |
+| `market_gold_18k` | number (₹/g) | 10318.19 |
+| `market_silver_999` | number (₹/g) | 180.31 |
+| `market_silver_925` | number (₹/g) | 166.79 |
+
+`gold_24k` … `silver_925` are always the **real API price** (IBJA). The `premium_*` and `market_*` columns record the % used that day and the resulting price, so every row has the full picture. Rows saved before v1.1.0 don't have them.
+
+### `daily_rate_rows/{YYYY-MM-DD}_{metal}_{purity}`: five rows per day
+
+The same prices, one row per metal and purity, so each row reads as API price → % → final price. Written in the same batch as `daily_rates/{date}`; a second run on the same day replaces the five rows.
+
+| Field | Type | Example (`2026-11-16_gold_22K`) |
+|---|---|---|
+| `rate_date` | string | `2026-11-16` |
+| `metal` | string | `gold` / `silver` |
+| `purity` | string | `24K` `22K` `18K` / `999` `925` |
+| `api_price` | number (₹/g) | 12449.72 (real price from the API, converted to the purity) |
+| `premium_pct` | number (%) | 1.3 |
+| `market_price` | number (₹/g) | 12611.57 (= `api_price` × 1.013) |
+| `usd_inr` | number | 94.19 |
+| `source` | string | `METALS.DEV` / `MANUAL` |
+| `benchmark` | string | `IBJA` |
+| `rate_time` | timestamp | from `timestamps.metal` |
+| `created_at` | timestamp | when saved |
 
 ### `daily_rates/latest`
 A copy of the newest row plus `stale`, `last_error` and `last_attempt_at`. The app does not read it for today's rate (that comes through Remote Config, below); it is the source the job publishes from.
@@ -201,7 +231,7 @@ A copy of the newest row plus `stale`, `last_error` and `last_attempt_at`. The a
 Empty or `null` means use the API. Clear the fields to go back to the API.
 
 ### Security rules
-- Signed-in users can **read** `daily_rates`.
+- Signed-in users can **read** `daily_rates` and `daily_rate_rows`.
 - Only the Cloud Function (admin) **writes**. Users can never write.
 
 ---
@@ -220,7 +250,40 @@ Empty or `null` means use the API. Clear the fields to go back to the API.
 - **The rate is always shown with its date**, e.g. "₹13,581/g · as of 14 Nov".
 - **If the rate is not from the latest scheduled run, show a warning**, e.g. ⚠️ "Today's rate isn't available yet. Showing rate from 14 Nov." The latest scheduled run is today at 5 AM IST on a weekday, or Friday on weekends, so normal weekends and the time before 5 AM don't show a warning.
 - The app never shows an error or an empty value for the rate. If there's no rate at all (first install, offline), it shows "Rate not available" and hides values.
-- Value = grams × rate for the item's purity.
+- Value = grams × rate for the item's purity, with the market premium added (see [Market premium](#market-premium-gold-and-silver-)).
+
+## Market premium (gold and silver %)
+
+Shops quote a little above the IBJA benchmark (about **1.3%** on 14–16 Nov 2026: GoodReturns 24K ₹13,761/g vs IBJA ₹13,581/g). The kit can add a **market premium** on top of IBJA when values are shown. Decided by the owner on 16 Nov 2026:
+
+- **Two settings, one per metal**, in Firebase **Remote Config**. They apply to **every user** of the app:
+
+  | Parameter | Type | Example | Meaning |
+  |---|---|---|---|
+  | `goldrates_premium_gold_pct` | Number | `1.3` | % added to gold 24K, 22K and 18K |
+  | `goldrates_premium_silver_pct` | Number | `1.3` | % added to silver 999 and 925 |
+
+- **Change it any time without a deployment or app update:** Firebase console › Remote Config › edit the value › **Publish changes**. Phones pick it up on their next Remote Config check (open apps within about an hour, or straight away on a pull to refresh).
+- `0` = plain IBJA. Allowed range is **0 to 10**. A value that is empty, not a number, below 0 or above 10 is ignored and the app's built-in default is used instead.
+- **The database keeps everything.** Each `daily_rates` row keeps the real API price in `gold_24k` … `silver_925`, plus the % in effect that morning (`premium_gold_pct`, `premium_silver_pct`) and the price with it added (`market_gold_24k` … `market_silver_925`). The same day is also saved as **five rows** in `daily_rate_rows`, one per purity: API price, %, final price. See [Firestore structure](#firestore-structure).
+- The app applies the **current** % from Remote Config, so a change shows on phones within about an hour, without waiting for the next 5 AM run. The `market_*` columns record what the % was on each day.
+- The premium applies to **every value shown**: today's price, item values, growth, net worth, history charts and reports.
+- **The premium is private: the app never shows it.** No screen, report or PDF shows the %, the plain IBJA rate next to the shown rate, or the word "premium". The app shows one rate, e.g. "₹13,758/g · as of 14 Nov", called the market rate, and may say it is *based on* the IBJA benchmark. It must not call the shown number "the IBJA rate", because it isn't.
+- Like the rates themselves, the two values reach the phone through Remote Config (that is how the app applies them without a deployment). They are not shown, but someone inspecting the app's network traffic could read them. If that ever matters, the premium can move server side (the job would publish rates with the premium included), at the cost of a re-run of the job after each change.
+- The 5 AM job reads the two parameters each morning for the row, and **creates them** with the app's default (`createGoldRatesDaily({ premiumDefault })`) if they don't exist yet, so they appear in the console ready to edit. It never changes them after that.
+
+Example (24K on 14 Nov 2026, 1.3%): 13,581.02 × 1.013 = **13,757.57**; 22K 12,449.72 × 1.013 = **12,611.57**.
+
+In code:
+
+| Import | What it does |
+|---|---|
+| `RateSource.readPremium()` | The app's source returns `{ gold_pct, silver_pct }`; `premiumFromValues(get, fallback)` reads the two parameters |
+| `useGoldRates(source)` / `rateStatus(latest, now, premium)` | `rates` = IBJA + premium (use it for every value and every rate shown), `ibja` = plain IBJA and `premium` = the % used, for calculations only, never shown |
+| `applyPremium(rates, premium)` | Same for history rows (`getRatesForDate`, charts) |
+| `rnFirebaseSource(rc, { premiumFallback })` | Reads the two parameters for `@react-native-firebase/remote-config` |
+
+A source without `readPremium` behaves exactly like v1.0.0 (plain IBJA).
 
 ---
 
@@ -233,18 +296,20 @@ These are set inside the kit (not inputs):
 | Provider | Metals.dev `/v1/latest` |
 | Currency / unit | INR / gram |
 | Run days and time | Mon–Fri, 5:00 AM IST, once a day |
-| Retries | None |
+| Retries | Only after a temporary failure: 6, 7 and 8 AM IST, stop on success |
 | Sanity limit | ±10% vs last rate |
 | Warning shown | When the rate is not from the latest scheduled run (see App side) |
 | "Rates may be outdated" | After 3 working days without a new rate |
 | Purity factors | 22K 0.9167, 18K 0.75, 925 0.925 |
+| Market premium range | 0–10% per metal (the values themselves are Remote Config settings, see Market premium) |
 
 ---
 
 ## Not in this version
 - Other providers or countries (later, if needed).
 - Historical monthly rates for purchase-price estimates (RBI monthly table). Planned separately.
-- A shop "premium" to match jeweller rates. The display choice is still open: IBJA is about 1.3% below shop rates.
+- A different premium per user (the premium is the same for every user).
+- GST: values never include the 3% GST that shops add when you buy.
 
 ---
 
@@ -274,7 +339,7 @@ Then the kit is wired into PAL.
 |---|---|---|
 | Failure email: how it is sent | Cloud Monitoring alert on the `GOLDRATE_API_FAILED` / `GOLDRATE_API_RECOVERED` log entries, built-in email, no SMTP | **Decided 16 Nov 2026** (steps in [docs/setup.md](docs/setup.md#6-the-failure-email)) |
 | Failure email: address | The owner's address, set as `ALERT_EMAIL` | To confirm |
-| Rate shown in the app | IBJA labelled as IBJA (recommended) / a market rate typed by hand daily / IBJA + an adjustable premium | To decide. IBJA is about 1.3% below shop rates |
+| Rate shown in the app | IBJA + a premium per metal from Remote Config, same for all users, 1.3% to start | **Decided 16 Nov 2026** (see [Market premium](#market-premium-gold-and-silver-)) |
 | Metals.dev plan | Free (100 calls/month) or paid ($1.79/month) for commercial use | Free for now; paid before launch if needed |
 
 ---
