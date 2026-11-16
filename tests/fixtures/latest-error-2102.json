@@ -1,0 +1,7 @@
+{
+  "status": "failure",
+  "currency": "INR",
+  "unit": "g",
+  "error_code": 2102,
+  "error_message": "Missing parameter"
+}

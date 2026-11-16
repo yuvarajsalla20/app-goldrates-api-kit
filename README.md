@@ -3,7 +3,7 @@
 Daily **India gold and silver rates** (IBJA benchmark) for Expo + Firebase apps.
 It fetches **once a day at 5:00 AM IST, Monday to Friday**, converts the rates to 24K / 22K / 18K gold and 999 / 925 silver per gram in ₹, stores one row per day, and gives the app a simple way to read the latest rate.
 
-> Status: **design only, not built yet.** See [Build plan](#build-plan).
+> Status: **v1.0.0 built.** Setup steps: [docs/setup.md](docs/setup.md). What is still open: [Open decisions](#open-decisions).
 
 Part of the shared kits:
 [app-core-kit](https://github.com/yuvarajsalla20/app-core-kit) ·
@@ -36,12 +36,12 @@ The kit has two parts: the **Cloud Function** (deployed to the app's Firebase pr
 
 Find a SHA with `git ls-remote https://github.com/yuvarajsalla20/app-goldrates-api-kit refs/tags/v1.0.0`. Use `git+https`, never `git+ssh`.
 
-Planned entry points (*names to confirm when building*):
+Entry points:
 
 | Import | What it holds |
 |---|---|
-| `app-goldrates-api-kit` | App side: `useGoldRates()` (today's rate from Remote Config, with `rateDate` and `stale`), `getRatesForDate(date)` (history from Firestore), `valueOf({ metal, purity, grams })`, `KIT_NAME`, `KIT_VERSION` |
-| `app-goldrates-api-kit/functions` | Cloud side: `goldRatesDaily` (the scheduled function), re-exported from the app's `functions/index.ts` |
+| `app-goldrates-api-kit` | App side: `useGoldRates(source)` (today's rate from Remote Config, with `state`, `rateDate` and `stale`), `rnFirebaseSource(remoteConfig())`, `rateStatus`, `getRatesForDate(readDoc, date)` (history from Firestore), `valueOf(rates, { metal, purity, grams }, { premiumPct? })`, `KIT_NAME`, `KIT_VERSION` |
+| `app-goldrates-api-kit/functions` | Cloud side: `goldRatesDaily` (the scheduled function) or `createGoldRatesDaily({ region, onAlert })`, re-exported from the app's `functions/src/index.ts`. Ships as built JavaScript in `dist/`. |
 
 ---
 
@@ -88,7 +88,7 @@ Plan: the free plan gives 100 calls a month, and the kit uses about 22 (one per 
 | `gold_18k` | `gold_24k × 0.75` | 18/24 karat, BIS hallmark 18K750 |
 | `silver_925` | `silver_999 × 0.925` | Sterling, BIS silver grade |
 
-Rounded to 2 decimals.
+Rounded to 2 decimals (half up), so 18K on 14 Nov 2026 is 13,581.02 × 0.75 = 10,185.765 → **10,185.77**.
 
 ---
 
@@ -176,14 +176,15 @@ Every Metals.dev response has `status` (`success` / `failure`). A failure also h
 | `rate_date` | string (doc id) | `2026-11-14` |
 | `gold_24k` | number (₹/g) | 13581.02 |
 | `gold_22k` | number (₹/g) | 12449.72 |
-| `gold_18k` | number (₹/g) | 10185.76 |
+| `gold_18k` | number (₹/g) | 10185.77 |
 | `silver_999` | number (₹/g) | 178.00 |
 | `silver_925` | number (₹/g) | 164.65 |
 | `usd_inr` | number | 94.19 |
 | `source` | string | `METALS.DEV` or `MANUAL` |
 | `source_url` | string | `https://api.metals.dev/v1/latest` |
 | `benchmark` | string | `IBJA` (or where a manual rate came from, e.g. `GoodReturns`) |
-| `rate_time` | timestamp | from `timestamps.metal` |
+| `rate_time` | timestamp | from `timestamps.metal` (null for manual) |
+| `unchanged` | boolean | true when the price equals the previous row (e.g. IBJA holiday) |
 | `created_at` | timestamp | when saved |
 
 ### `daily_rates/latest`
@@ -249,19 +250,19 @@ These are set inside the kit (not inputs):
 
 ## Build plan
 
-Starts only after the owner says **"yes, build it"**. The empty repo `yuvarajsalla20/app-goldrates-api-kit` exists.
+Approved by the owner on 16 Nov 2026. Steps 1–4 and 6–8 are built in v1.0.0; 5 and 9 need a live call with the owner's key.
 
-| Step | What | Done when |
-|---|---|---|
-| 1 | Repo setup: README (this file), licence, folder layout (`functions/`, `app/`, `docs/`), TypeScript, lint | Repo builds cleanly |
-| 2 | Metals.dev client: one call to `/v1/latest?currency=INR&unit=g`, read the 4 fields, map the error codes above | Unit tests pass with saved sample responses (success + each error code) |
-| 3 | Rate maths: 22K / 18K / 925 conversion, rounding, ±10% sanity check | Tests match the 14 Nov 2026 example values |
-| 4 | Scheduled job: 5:00 AM IST Mon–Fri, manual override check, upsert `daily_rates/{date}` and `latest`, publish `goldrates_latest` to Remote Config, stale flag, alert log | Runs in the Firebase emulator and writes the right documents |
-| 5 | Check if timeseries returns IBJA; if yes add backfill of missed weekdays (≤30 days per call) | Decision recorded; if built, emulator test fills the gap |
-| 6 | Firestore security rules: users read only, only the function writes | Rules tests pass |
-| 7 | App side (Expo): read today's rate from Remote Config (real-time update, cached on device), "Rate as of", "Rates may be outdated" after 3 working days, value = grams × rate | Works in the example app |
-| 8 | Failure email (fail + recovered; sending method to discuss) and setup docs: Blaze plan, `firebase functions:secrets:set METALS_DEV_API_KEY`, deploy, how to set or clear a manual rate | A fresh project can follow them end to end |
-| 9 | Live check: one real call with the owner's key, compare with IBJA's published rate | `gold_24k` matches IBJA 999 |
+| Step | What | Done when | Status |
+|---|---|---|---|
+| 1 | Repo setup: README (this file), licence, folder layout (`functions/`, `app/`, `docs/`), TypeScript, lint | Repo builds cleanly | ✅ Built |
+| 2 | Metals.dev client: one call to `/v1/latest?currency=INR&unit=g`, read the 4 fields, map the error codes above | Unit tests pass with saved sample responses (success + each error code) | ✅ Built (sample responses are hand-made from the documented format) |
+| 3 | Rate maths: 22K / 18K / 925 conversion, rounding, ±10% sanity check | Tests match the 14 Nov 2026 example values | ✅ Built |
+| 4 | Scheduled job: 5:00 AM IST Mon–Fri, manual override check, upsert `daily_rates/{date}` and `latest`, publish `goldrates_latest` to Remote Config, stale flag, alert log | Runs in the Firebase emulator and writes the right documents | ✅ Built; emulator test passes (Remote Config faked) |
+| 5 | Check if timeseries returns IBJA; if yes add backfill of missed weekdays (≤30 days per call) | Decision recorded; if built, emulator test fills the gap | ⏳ Not built: needs a live timeseries call |
+| 6 | Firestore security rules: users read only, only the function writes | Rules tests pass | ✅ Built; emulator rules tests pass |
+| 7 | App side (Expo): read today's rate from Remote Config (real-time update, cached on device), "Rate as of", "Rates may be outdated" after 3 working days, value = grams × rate | Works in the example app | ✅ Built and unit-tested; not yet tried in PAL |
+| 8 | Failure email (fail + recovered; sending method to discuss) and setup docs: Blaze plan, `firebase functions:secrets:set METALS_DEV_API_KEY`, deploy, how to set or clear a manual rate | A fresh project can follow them end to end | ✅ Log entries + email text + docs; sending method still open |
+| 9 | Live check: one real call with the owner's key, compare with IBJA's published rate | `gold_24k` matches IBJA 999 | ⏳ Needs the owner's key |
 
 Then the kit is wired into PAL.
 
@@ -281,17 +282,22 @@ Then the kit is wired into PAL.
 ## Kit rules
 
 - **The kit tags itself.** Raise `version` in `package.json` (and `KIT_VERSION`, a test checks they match) inside the pull request and add a CHANGELOG note. Merging creates tag `v<version>` through the `version-tag` workflow, which also refuses a pull request whose version is not higher than the latest tag. Never tag by hand.
-- **Expo rules:** the app side uses only Expo-friendly packages (`@react-native-firebase/remote-config` or the Firebase JS SDK, *to confirm*); no hand-edited `ios/` or `android/`.
+- **Expo rules:** the app side imports no Firebase SDK itself. The app passes a small `{ read, subscribe }` source; `rnFirebaseSource` fits `@react-native-firebase/remote-config` (Expo development build). No hand-edited `ios/` or `android/`.
+- **`dist/` is committed.** The Cloud Function side must be plain JavaScript inside `node_modules`, so after changing `functions/` or `shared/` run `npm run build` and commit `dist/`. CI fails if it is out of date.
 - **Nothing app-specific** in the kit. App names, colours and wording stay in the app.
 - **Commit and push only when the owner says so.**
 
-## Planned folder layout
+## Folder layout
 
 ```
-functions/   the scheduled job, Metals.dev client, rate maths, Remote Config publish, alert log
-app/         the Expo side: useGoldRates, getRatesForDate, valueOf
-docs/        setup: Blaze plan, secret, deploy, manual rate
-tests/       vitest, with saved Metals.dev sample responses
+shared/          rate maths, schedule and types used by both sides
+functions/       the scheduled job, Metals.dev client, Firestore + Remote Config adapters, alert text
+app/             the Expo side: useGoldRates, rateStatus, getRatesForDate, valueOf
+dist/            built JavaScript of functions/ + shared/ (committed, see Kit rules)
+rules/           Firestore rules snippet
+docs/            setup: Blaze plan, secret, deploy, manual rate, email
+tests/           vitest unit tests, with sample Metals.dev responses
+emulator-tests/  Firestore emulator: rules + the job writing real documents (npm run test:emulator)
 ```
 
 ## License

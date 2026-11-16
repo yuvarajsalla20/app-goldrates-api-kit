@@ -1,0 +1,7 @@
+{
+  "status": "failure",
+  "currency": "INR",
+  "unit": "g",
+  "error_code": 2104,
+  "error_message": "Invalid date"
+}

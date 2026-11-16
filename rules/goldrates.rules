@@ -1,0 +1,13 @@
+// app-goldrates-api-kit: paste these two blocks inside `match /databases/{database}/documents { … }`
+// of the app's firestore.rules. Only the Cloud Function (admin SDK, which skips rules) writes.
+
+    // Daily rates and `latest`: any signed-in user may read, nobody may write.
+    match /daily_rates/{rateId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Manual override: admin only (Firebase console or admin SDK).
+    match /config/goldrates {
+      allow read, write: if false;
+    }

@@ -1,0 +1,63 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ensureAdminApp = ensureAdminApp;
+exports.fromFirestore = fromFirestore;
+exports.firestoreStore = firestoreStore;
+exports.publishToRemoteConfig = publishToRemoteConfig;
+/** Firestore and Remote Config adapters for the job (firebase-admin). */
+const app_1 = require("firebase-admin/app");
+const firestore_1 = require("firebase-admin/firestore");
+const remote_config_1 = require("firebase-admin/remote-config");
+const types_1 = require("../shared/types");
+function ensureAdminApp() {
+    if ((0, app_1.getApps)().length === 0)
+        (0, app_1.initializeApp)();
+}
+const TIME_FIELDS = ['rate_time', 'created_at', 'last_attempt_at'];
+/** ISO strings → Firestore Timestamps, so the console shows real times. */
+function toFirestore(row) {
+    const out = { ...row };
+    for (const field of TIME_FIELDS) {
+        const value = out[field];
+        if (typeof value === 'string')
+            out[field] = firestore_1.Timestamp.fromDate(new Date(value));
+    }
+    return out;
+}
+/** Firestore Timestamps → ISO strings. */
+function fromFirestore(data) {
+    if (!data)
+        return null;
+    const out = { ...data };
+    for (const field of TIME_FIELDS) {
+        const value = out[field];
+        if (value && typeof value.toDate === 'function')
+            out[field] = value.toDate().toISOString();
+    }
+    return out;
+}
+function firestoreStore(db = (0, firestore_1.getFirestore)()) {
+    const rates = db.collection(types_1.RATES_COLLECTION);
+    return {
+        readConfig: async () => fromFirestore((await db.collection(types_1.CONFIG_COLLECTION).doc(types_1.CONFIG_DOC).get()).data()),
+        readLatest: async () => fromFirestore((await rates.doc(types_1.LATEST_DOC).get()).data()),
+        // set() without merge: a second run on the same day replaces the row, never adds one.
+        saveDaily: async (row) => {
+            await rates.doc(row.rate_date).set(toFirestore(row));
+        },
+        saveLatest: async (latest) => {
+            await rates.doc(types_1.LATEST_DOC).set(toFirestore(latest));
+        },
+    };
+}
+/** Writes the latest rate as the JSON parameter `goldrates_latest` and publishes the template. */
+async function publishToRemoteConfig(latest) {
+    const rc = (0, remote_config_1.getRemoteConfig)();
+    const template = await rc.getTemplate();
+    template.parameters[types_1.REMOTE_CONFIG_KEY] = {
+        defaultValue: { value: JSON.stringify(latest) },
+        valueType: 'JSON',
+        description: 'Daily gold and silver rates (app-goldrates-api-kit). Written by the 5 AM job; do not edit by hand.',
+    };
+    await rc.publishTemplate(template);
+}
