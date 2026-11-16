@@ -131,7 +131,15 @@ import { getRatesForDate } from 'app-goldrates-api-kit';
 const row = await getRatesForDate((c, id) => getDoc(doc(db, c, id)).then((s) => s.data() ?? null), '2026-11-14');
 ```
 
-## 8. First-week checks
+## 8. Market premium
+
+Two Remote Config parameters, the same for every user: `goldrates_premium_gold_pct` and `goldrates_premium_silver_pct` (% added to IBJA, 0 to 10).
+
+- If the app's function passes `premiumDefault`, the next 5 AM run creates both with that value. Otherwise add them yourself: Firebase console › Remote Config › **Add parameter**, type **Number**.
+- To change: Firebase console › Remote Config › click the value › type the new % › **Save** › **Publish changes**. No deployment, no app update.
+- Never show the % in the app (see the README's Market premium section).
+
+## 9. First-week checks
 
 - Compare `daily_rates/{date}.gold_24k` with IBJA's published 999 rate on ibja.co for a few days.
 - Confirm Metals.dev holds the previous working day's closing rate at 5 AM.

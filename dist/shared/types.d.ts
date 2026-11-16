@@ -42,6 +42,9 @@ export type Metal = 'gold' | 'silver';
 export type GoldPurity = '24K' | '22K' | '18K';
 export type SilverPurity = '999' | '925';
 export type Purity = GoldPurity | SilverPurity;
+/** Remote Config parameters with the market premium (%), one per metal. Set by the owner, read by the app. */
+export declare const PREMIUM_GOLD_KEY = "goldrates_premium_gold_pct";
+export declare const PREMIUM_SILVER_KEY = "goldrates_premium_silver_pct";
 /** Name of the Remote Config parameter the job publishes. */
 export declare const REMOTE_CONFIG_KEY = "goldrates_latest";
 /** Firestore collection with one row per weekday plus `latest`. */

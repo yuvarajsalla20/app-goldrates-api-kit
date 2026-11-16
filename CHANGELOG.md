@@ -2,6 +2,16 @@
 
 Release notes for app-goldrates-api-kit, newest first. Each version is tagged in git (`v1.0.0`).
 
+## 1.1.0
+
+Market premium: one % for gold and one for silver, set in Remote Config (`goldrates_premium_gold_pct`, `goldrates_premium_silver_pct`) and applied to every user's values. Change it in the Firebase console, no deployment. The premium is never shown to users.
+
+- `RateSource.readPremium`, `premiumFromValues`, `applyPremium`, `parsePremiumPct` (0–10, anything else falls back).
+- `useGoldRates` / `rateStatus` return `rates` with the premium, plus `ibja` (plain) and `premium` for calculations. Sources without `readPremium` work as before.
+- `rnFirebaseSource(rc, { premiumFallback })`; a key string still works.
+- `createGoldRatesDaily({ premiumDefault })` creates the two parameters if missing and never overwrites them.
+- Stored rates stay plain IBJA.
+
 ## 1.0.0
 
 First release.

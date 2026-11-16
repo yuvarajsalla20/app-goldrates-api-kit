@@ -96,7 +96,7 @@ function createGoldRatesDaily(options = {}) {
             now: () => new Date(),
             ...store,
             fetchRates: () => (0, metalsDev_1.fetchLatestRates)(exports.METALS_DEV_API_KEY.value()),
-            publish: firebase_1.publishToRemoteConfig,
+            publish: (latest) => (0, firebase_1.publishToRemoteConfig)(latest, options.premiumDefault),
             alert: async (alert) => {
                 const message = (0, alertMessage_1.alertMessage)(alert);
                 logAlert(alert, message);

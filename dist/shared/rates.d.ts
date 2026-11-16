@@ -42,3 +42,29 @@ export declare function valueOf(rates: Rates, item: {
 }, options?: {
     premiumPct?: number;
 }): number;
+/**
+ * Market premium: % added on top of IBJA when values are shown (shops quote a
+ * little above the IBJA benchmark). Stored rates always stay plain IBJA.
+ */
+export interface Premium {
+    /** % added to every gold purity, e.g. 1.3. */
+    gold_pct: number;
+    /** % added to every silver purity. */
+    silver_pct: number;
+}
+/** No premium: plain IBJA. */
+export declare const NO_PREMIUM: Premium;
+/** A premium above this is treated as a typo and ignored. */
+export declare const MAX_PREMIUM_PCT = 10;
+/** True when either metal has a premium. */
+export declare const hasPremium: (premium: Premium | null | undefined) => premium is Premium;
+/**
+ * Reads one premium value (a Remote Config string or number). Empty, not a
+ * number, below 0 or above {@link MAX_PREMIUM_PCT} → `fallback`.
+ */
+export declare function parsePremiumPct(value: unknown, fallback?: number): number;
+/**
+ * The same rates with the premium added to every purity, rounded to 2
+ * decimals. Every other field (date, source, usd_inr…) is kept as it is.
+ */
+export declare function applyPremium<T extends Rates>(rates: T, premium: Premium | null | undefined): T;

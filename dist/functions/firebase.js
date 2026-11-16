@@ -50,8 +50,12 @@ function firestoreStore(db = (0, firestore_1.getFirestore)()) {
         },
     };
 }
-/** Writes the latest rate as the JSON parameter `goldrates_latest` and publishes the template. */
-async function publishToRemoteConfig(latest) {
+/**
+ * Writes the latest rate as the JSON parameter `goldrates_latest` and publishes the template.
+ * With `premiumDefault`, also creates the two premium parameters when they are missing, so the
+ * owner finds them in the console. An existing premium value is never changed: the owner owns it.
+ */
+async function publishToRemoteConfig(latest, premiumDefault) {
     const rc = (0, remote_config_1.getRemoteConfig)();
     const template = await rc.getTemplate();
     template.parameters[types_1.REMOTE_CONFIG_KEY] = {
@@ -59,5 +63,20 @@ async function publishToRemoteConfig(latest) {
         valueType: 'JSON',
         description: 'Daily gold and silver rates (app-goldrates-api-kit). Written by the 5 AM job; do not edit by hand.',
     };
+    if (premiumDefault) {
+        const seeds = [
+            [types_1.PREMIUM_GOLD_KEY, premiumDefault.gold_pct, 'gold'],
+            [types_1.PREMIUM_SILVER_KEY, premiumDefault.silver_pct, 'silver'],
+        ];
+        for (const [key, pct, metal] of seeds) {
+            if (template.parameters[key])
+                continue;
+            template.parameters[key] = {
+                defaultValue: { value: String(pct) },
+                valueType: 'NUMBER',
+                description: `Market premium for ${metal}, in % added to the IBJA rate for every user (0 = plain IBJA, max 10). Edit and publish; no deployment needed.`,
+            };
+        }
+    }
     await rc.publishTemplate(template);
 }

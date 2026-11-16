@@ -1,6 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CONFIG_DOC = exports.CONFIG_COLLECTION = exports.LATEST_DOC = exports.RATES_COLLECTION = exports.REMOTE_CONFIG_KEY = void 0;
+exports.CONFIG_DOC = exports.CONFIG_COLLECTION = exports.LATEST_DOC = exports.RATES_COLLECTION = exports.REMOTE_CONFIG_KEY = exports.PREMIUM_SILVER_KEY = exports.PREMIUM_GOLD_KEY = void 0;
+/** Remote Config parameters with the market premium (%), one per metal. Set by the owner, read by the app. */
+exports.PREMIUM_GOLD_KEY = 'goldrates_premium_gold_pct';
+exports.PREMIUM_SILVER_KEY = 'goldrates_premium_silver_pct';
 /** Name of the Remote Config parameter the job publishes. */
 exports.REMOTE_CONFIG_KEY = 'goldrates_latest';
 /** Firestore collection with one row per weekday plus `latest`. */

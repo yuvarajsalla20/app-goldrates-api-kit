@@ -3,7 +3,7 @@
 Daily **India gold and silver rates** (IBJA benchmark) for Expo + Firebase apps.
 It fetches **once a day at 5:00 AM IST, Monday to Friday**, converts the rates to 24K / 22K / 18K gold and 999 / 925 silver per gram in ₹, stores one row per day, and gives the app a simple way to read the latest rate.
 
-> Status: **v1.0.0 built.** Setup steps: [docs/setup.md](docs/setup.md). What is still open: [Open decisions](#open-decisions).
+> Status: **v1.1.0** (adds the market premium). Setup steps: [docs/setup.md](docs/setup.md). What is still open: [Open decisions](#open-decisions).
 
 Part of the shared kits:
 [app-core-kit](https://github.com/yuvarajsalla20/app-core-kit) ·
@@ -220,7 +220,39 @@ Empty or `null` means use the API. Clear the fields to go back to the API.
 - **The rate is always shown with its date**, e.g. "₹13,581/g · as of 14 Nov".
 - **If the rate is not from the latest scheduled run, show a warning**, e.g. ⚠️ "Today's rate isn't available yet. Showing rate from 14 Nov." The latest scheduled run is today at 5 AM IST on a weekday, or Friday on weekends, so normal weekends and the time before 5 AM don't show a warning.
 - The app never shows an error or an empty value for the rate. If there's no rate at all (first install, offline), it shows "Rate not available" and hides values.
-- Value = grams × rate for the item's purity.
+- Value = grams × rate for the item's purity, with the market premium added (see [Market premium](#market-premium-gold-and-silver-)).
+
+## Market premium (gold and silver %)
+
+Shops quote a little above the IBJA benchmark (about **1.3%** on 14–16 Nov 2026: GoodReturns 24K ₹13,761/g vs IBJA ₹13,581/g). The kit can add a **market premium** on top of IBJA when values are shown. Decided by the owner on 16 Nov 2026:
+
+- **Two settings, one per metal**, in Firebase **Remote Config**. They apply to **every user** of the app:
+
+  | Parameter | Type | Example | Meaning |
+  |---|---|---|---|
+  | `goldrates_premium_gold_pct` | Number | `1.3` | % added to gold 24K, 22K and 18K |
+  | `goldrates_premium_silver_pct` | Number | `1.3` | % added to silver 999 and 925 |
+
+- **Change it any time without a deployment or app update:** Firebase console › Remote Config › edit the value › **Publish changes**. Phones pick it up on their next Remote Config check (open apps within about an hour, or straight away on a pull to refresh).
+- `0` = plain IBJA. Allowed range is **0 to 10**. A value that is empty, not a number, below 0 or above 10 is ignored and the app's built-in default is used instead.
+- **Stored rates never include the premium.** `daily_rates` and `goldrates_latest` stay pure IBJA, so history can always be shown with any %.
+- The premium applies to **every value shown**: today's price, item values, growth, net worth, history charts and reports.
+- **The premium is private: the app never shows it.** No screen, report or PDF shows the %, the plain IBJA rate next to the shown rate, or the word "premium". The app shows one rate, e.g. "₹13,758/g · as of 14 Nov", called the market rate, and may say it is *based on* the IBJA benchmark. It must not call the shown number "the IBJA rate", because it isn't.
+- Like the rates themselves, the two values reach the phone through Remote Config (that is how the app applies them without a deployment). They are not shown, but someone inspecting the app's network traffic could read them. If that ever matters, the premium can move server side (the job would publish rates with the premium included), at the cost of a re-run of the job after each change.
+- The 5 AM job **creates the two parameters** with the app's default (`createGoldRatesDaily({ premiumDefault })`) if they don't exist yet, so they appear in the console ready to edit. It never changes them after that.
+
+Example (24K on 14 Nov 2026, 1.3%): 13,581.02 × 1.013 = **13,757.57**; 22K 12,449.72 × 1.013 = **12,611.57**.
+
+In code:
+
+| Import | What it does |
+|---|---|
+| `RateSource.readPremium()` | The app's source returns `{ gold_pct, silver_pct }`; `premiumFromValues(get, fallback)` reads the two parameters |
+| `useGoldRates(source)` / `rateStatus(latest, now, premium)` | `rates` = IBJA + premium (use it for every value and every rate shown), `ibja` = plain IBJA and `premium` = the % used, for calculations only, never shown |
+| `applyPremium(rates, premium)` | Same for history rows (`getRatesForDate`, charts) |
+| `rnFirebaseSource(rc, { premiumFallback })` | Reads the two parameters for `@react-native-firebase/remote-config` |
+
+A source without `readPremium` behaves exactly like v1.0.0 (plain IBJA).
 
 ---
 
@@ -238,13 +270,15 @@ These are set inside the kit (not inputs):
 | Warning shown | When the rate is not from the latest scheduled run (see App side) |
 | "Rates may be outdated" | After 3 working days without a new rate |
 | Purity factors | 22K 0.9167, 18K 0.75, 925 0.925 |
+| Market premium range | 0–10% per metal (the values themselves are Remote Config settings, see Market premium) |
 
 ---
 
 ## Not in this version
 - Other providers or countries (later, if needed).
 - Historical monthly rates for purchase-price estimates (RBI monthly table). Planned separately.
-- A shop "premium" to match jeweller rates. The display choice is still open: IBJA is about 1.3% below shop rates.
+- A different premium per user (the premium is the same for every user).
+- GST: values never include the 3% GST that shops add when you buy.
 
 ---
 
@@ -274,7 +308,7 @@ Then the kit is wired into PAL.
 |---|---|---|
 | Failure email: how it is sent | Cloud Monitoring alert on the `GOLDRATE_API_FAILED` / `GOLDRATE_API_RECOVERED` log entries, built-in email, no SMTP | **Decided 16 Nov 2026** (steps in [docs/setup.md](docs/setup.md#6-the-failure-email)) |
 | Failure email: address | The owner's address, set as `ALERT_EMAIL` | To confirm |
-| Rate shown in the app | IBJA labelled as IBJA (recommended) / a market rate typed by hand daily / IBJA + an adjustable premium | To decide. IBJA is about 1.3% below shop rates |
+| Rate shown in the app | IBJA + a premium per metal from Remote Config, same for all users, 1.3% to start | **Decided 16 Nov 2026** (see [Market premium](#market-premium-gold-and-silver-)) |
 | Metals.dev plan | Free (100 calls/month) or paid ($1.79/month) for commercial use | Free for now; paid before launch if needed |
 
 ---
