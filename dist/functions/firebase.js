@@ -11,6 +11,7 @@ const firestore_1 = require("firebase-admin/firestore");
 const remote_config_1 = require("firebase-admin/remote-config");
 const types_1 = require("../shared/types");
 const rates_1 = require("../shared/rates");
+const rows_1 = require("../shared/rows");
 function ensureAdminApp() {
     if ((0, app_1.getApps)().length === 0)
         (0, app_1.initializeApp)();
@@ -56,9 +57,14 @@ function firestoreStore(db = (0, firestore_1.getFirestore)()) {
     return {
         readConfig: async () => fromFirestore((await db.collection(types_1.CONFIG_COLLECTION).doc(types_1.CONFIG_DOC).get()).data()),
         readLatest: async () => fromFirestore((await rates.doc(types_1.LATEST_DOC).get()).data()),
-        // set() without merge: a second run on the same day replaces the row, never adds one.
+        // One batch: the day's row and its five purity rows land together or not at all. set() without merge, so a second
+        // run on the same day replaces them and never adds more.
         saveDaily: async (row) => {
-            await rates.doc(row.rate_date).set(toFirestore(row));
+            const batch = db.batch();
+            batch.set(rates.doc(row.rate_date), toFirestore(row));
+            for (const { id, row: purityRow } of (0, rows_1.toPurityRows)(row))
+                batch.set(db.collection(rows_1.PURITY_ROWS_COLLECTION).doc(id), toFirestore(purityRow));
+            await batch.commit();
         },
         saveLatest: async (latest) => {
             await rates.doc(types_1.LATEST_DOC).set(toFirestore(latest));

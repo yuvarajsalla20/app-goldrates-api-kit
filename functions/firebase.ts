@@ -14,6 +14,7 @@ import {
   type LatestRate,
 } from '../shared/types';
 import { parsePremiumPct, type Premium } from '../shared/rates';
+import { PURITY_ROWS_COLLECTION, toPurityRows } from '../shared/rows';
 import type { ManualConfig } from './job';
 
 export function ensureAdminApp() {
@@ -62,9 +63,13 @@ export function firestoreStore(db: Firestore = getFirestore()) {
   return {
     readConfig: async () => fromFirestore<ManualConfig>((await db.collection(CONFIG_COLLECTION).doc(CONFIG_DOC).get()).data()),
     readLatest: async () => fromFirestore<LatestRate>((await rates.doc(LATEST_DOC).get()).data()),
-    // set() without merge: a second run on the same day replaces the row, never adds one.
+    // One batch: the day's row and its five purity rows land together or not at all. set() without merge, so a second
+    // run on the same day replaces them and never adds more.
     saveDaily: async (row: DailyRate) => {
-      await rates.doc(row.rate_date).set(toFirestore(row));
+      const batch = db.batch();
+      batch.set(rates.doc(row.rate_date), toFirestore(row));
+      for (const { id, row: purityRow } of toPurityRows(row)) batch.set(db.collection(PURITY_ROWS_COLLECTION).doc(id), toFirestore(purityRow));
+      await batch.commit();
     },
     saveLatest: async (latest: LatestRate) => {
       await rates.doc(LATEST_DOC).set(toFirestore(latest));

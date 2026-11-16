@@ -10,7 +10,9 @@ Market premium: one % for gold and one for silver, set in Remote Config (`goldra
 - `useGoldRates` / `rateStatus` return `rates` with the premium, plus `ibja` (plain) and `premium` for calculations. Sources without `readPremium` work as before.
 - `rnFirebaseSource(rc, { premiumFallback })`; a key string still works.
 - `createGoldRatesDaily({ premiumDefault })` creates the two parameters if missing and never overwrites them.
-- Stored rates stay plain IBJA.
+- Each `daily_rates` row keeps the real API price and adds `premium_gold_pct`, `premium_silver_pct` and `market_gold_24k` … `market_silver_925` as they were that morning (`JobDeps.readPremium`).
+- New collection `daily_rate_rows`: five rows per day (`{date}_{metal}_{purity}`) with `api_price`, `premium_pct`, `market_price`, saved in the same batch. Rules snippet updated (signed-in read, no writes).
+- The premium is never shown to users (see README).
 
 ## 1.0.0
 

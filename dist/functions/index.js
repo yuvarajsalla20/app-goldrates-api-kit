@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.goldRatesDaily = exports.METALS_DEV_API_KEY = exports.parseLatestResponse = exports.fetchLatestRates = exports.MetalsDevError = exports.METALS_DEV_ERRORS = exports.runDailyRates = exports.alertMessage = exports.KIT_VERSION = exports.KIT_NAME = void 0;
+exports.goldRatesDaily = exports.METALS_DEV_API_KEY = exports.parseLatestResponse = exports.fetchLatestRates = exports.MetalsDevError = exports.METALS_DEV_ERRORS = exports.runDailyRates = exports.alertMessage = exports.toPurityRows = exports.purityRowId = exports.PURITY_ROWS_COLLECTION = exports.KIT_VERSION = exports.KIT_NAME = void 0;
 exports.logAlert = logAlert;
 exports.createGoldRatesDaily = createGoldRatesDaily;
 /**
@@ -53,6 +53,10 @@ const metalsDev_1 = require("./metalsDev");
 var kit_1 = require("../shared/kit");
 Object.defineProperty(exports, "KIT_NAME", { enumerable: true, get: function () { return kit_1.KIT_NAME; } });
 Object.defineProperty(exports, "KIT_VERSION", { enumerable: true, get: function () { return kit_1.KIT_VERSION; } });
+var rows_1 = require("../shared/rows");
+Object.defineProperty(exports, "PURITY_ROWS_COLLECTION", { enumerable: true, get: function () { return rows_1.PURITY_ROWS_COLLECTION; } });
+Object.defineProperty(exports, "purityRowId", { enumerable: true, get: function () { return rows_1.purityRowId; } });
+Object.defineProperty(exports, "toPurityRows", { enumerable: true, get: function () { return rows_1.toPurityRows; } });
 var alertMessage_2 = require("./alertMessage");
 Object.defineProperty(exports, "alertMessage", { enumerable: true, get: function () { return alertMessage_2.alertMessage; } });
 var job_2 = require("./job");

@@ -15,6 +15,7 @@ beforeAll(async () => {
     await setDoc(doc(ctx.firestore(), 'daily_rates/2026-11-16'), { gold_24k: 13581.02 });
     await setDoc(doc(ctx.firestore(), 'daily_rates/latest'), { gold_24k: 13581.02 });
     await setDoc(doc(ctx.firestore(), 'config/goldrates'), { manual_gold_24k: null });
+    await setDoc(doc(ctx.firestore(), 'daily_rate_rows/2026-11-16_gold_22K'), { api_price: 12449.72 });
   });
 });
 
@@ -27,6 +28,7 @@ describe('Firestore rules', () => {
     const db = env.authenticatedContext('user-1').firestore();
     await assertSucceeds(getDoc(doc(db, 'daily_rates/2026-11-16')));
     await assertSucceeds(getDoc(doc(db, 'daily_rates/latest')));
+    await assertSucceeds(getDoc(doc(db, 'daily_rate_rows/2026-11-16_gold_22K')));
   });
   it('signed-out users cannot read', async () => {
     await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), 'daily_rates/latest')));
@@ -35,6 +37,7 @@ describe('Firestore rules', () => {
     const db = env.authenticatedContext('user-1').firestore();
     await assertFails(setDoc(doc(db, 'daily_rates/2026-11-17'), { gold_24k: 1 }));
     await assertFails(setDoc(doc(db, 'daily_rates/latest'), { gold_24k: 1 }));
+    await assertFails(setDoc(doc(db, 'daily_rate_rows/2026-11-17_gold_24K'), { api_price: 1 }));
   });
   it('users cannot read or change the manual override', async () => {
     const db = env.authenticatedContext('user-1').firestore();

@@ -2,6 +2,7 @@ import type { Premium } from '../shared/rates';
 import { type RateAlert } from './job';
 export { KIT_NAME, KIT_VERSION } from '../shared/kit';
 export { type Premium } from '../shared/rates';
+export { PURITY_ROWS_COLLECTION, purityRowId, toPurityRows, type PurityRateRow } from '../shared/rows';
 export { alertMessage } from './alertMessage';
 export { runDailyRates, type JobDeps, type JobResult, type ManualConfig, type RateAlert } from './job';
 export { METALS_DEV_ERRORS, MetalsDevError, fetchLatestRates, parseLatestResponse, type MetalsDevRates } from './metalsDev';

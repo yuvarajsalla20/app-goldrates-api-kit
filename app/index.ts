@@ -27,6 +27,7 @@ export {
   type Rates,
   type SilverPurity,
 } from '../shared/types';
+export { PURITY_ROWS_COLLECTION, purityRowId, toPurityRows, type PurityRateRow } from '../shared/rows';
 export { getRatesForDate, type ReadDoc } from './history';
 export { premiumFromValues, rnFirebaseSource, type RateSource, type RnFirebaseRemoteConfigLike, type RnFirebaseSourceOptions } from './source';
 export { parseLatest, rateStatus, type RateState, type RateStatus } from './status';

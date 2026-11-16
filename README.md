@@ -196,6 +196,24 @@ Every Metals.dev response has `status` (`success` / `failure`). A failure also h
 
 `gold_24k` … `silver_925` are always the **real API price** (IBJA). The `premium_*` and `market_*` columns record the % used that day and the resulting price, so every row has the full picture. Rows saved before v1.1.0 don't have them.
 
+### `daily_rate_rows/{YYYY-MM-DD}_{metal}_{purity}`: five rows per day
+
+The same prices, one row per metal and purity, so each row reads as API price → % → final price. Written in the same batch as `daily_rates/{date}`; a second run on the same day replaces the five rows.
+
+| Field | Type | Example (`2026-11-16_gold_22K`) |
+|---|---|---|
+| `rate_date` | string | `2026-11-16` |
+| `metal` | string | `gold` / `silver` |
+| `purity` | string | `24K` `22K` `18K` / `999` `925` |
+| `api_price` | number (₹/g) | 12449.72 (real price from the API, converted to the purity) |
+| `premium_pct` | number (%) | 1.3 |
+| `market_price` | number (₹/g) | 12611.57 (= `api_price` × 1.013) |
+| `usd_inr` | number | 94.19 |
+| `source` | string | `METALS.DEV` / `MANUAL` |
+| `benchmark` | string | `IBJA` |
+| `rate_time` | timestamp | from `timestamps.metal` |
+| `created_at` | timestamp | when saved |
+
 ### `daily_rates/latest`
 A copy of the newest row plus `stale`, `last_error` and `last_attempt_at`. The app does not read it for today's rate (that comes through Remote Config, below); it is the source the job publishes from.
 
@@ -210,7 +228,7 @@ A copy of the newest row plus `stale`, `last_error` and `last_attempt_at`. The a
 Empty or `null` means use the API. Clear the fields to go back to the API.
 
 ### Security rules
-- Signed-in users can **read** `daily_rates`.
+- Signed-in users can **read** `daily_rates` and `daily_rate_rows`.
 - Only the Cloud Function (admin) **writes**. Users can never write.
 
 ---
@@ -244,7 +262,7 @@ Shops quote a little above the IBJA benchmark (about **1.3%** on 14–16 Nov 202
 
 - **Change it any time without a deployment or app update:** Firebase console › Remote Config › edit the value › **Publish changes**. Phones pick it up on their next Remote Config check (open apps within about an hour, or straight away on a pull to refresh).
 - `0` = plain IBJA. Allowed range is **0 to 10**. A value that is empty, not a number, below 0 or above 10 is ignored and the app's built-in default is used instead.
-- **The database keeps everything.** Each `daily_rates` row keeps the real API price in `gold_24k` … `silver_925`, plus the % in effect that morning (`premium_gold_pct`, `premium_silver_pct`) and the price with it added (`market_gold_24k` … `market_silver_925`). See [Firestore structure](#firestore-structure).
+- **The database keeps everything.** Each `daily_rates` row keeps the real API price in `gold_24k` … `silver_925`, plus the % in effect that morning (`premium_gold_pct`, `premium_silver_pct`) and the price with it added (`market_gold_24k` … `market_silver_925`). The same day is also saved as **five rows** in `daily_rate_rows`, one per purity: API price, %, final price. See [Firestore structure](#firestore-structure).
 - The app applies the **current** % from Remote Config, so a change shows on phones within about an hour, without waiting for the next 5 AM run. The `market_*` columns record what the % was on each day.
 - The premium applies to **every value shown**: today's price, item values, growth, net worth, history charts and reports.
 - **The premium is private: the app never shows it.** No screen, report or PDF shows the %, the plain IBJA rate next to the shown rate, or the word "premium". The app shows one rate, e.g. "₹13,758/g · as of 14 Nov", called the market rate, and may say it is *based on* the IBJA benchmark. It must not call the shown number "the IBJA rate", because it isn't.
