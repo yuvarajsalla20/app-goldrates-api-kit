@@ -1,0 +1,15 @@
+{
+  "status": "success",
+  "currency": "INR",
+  "unit": "g",
+  "metals": {
+    "gold": 11523.4,
+    "silver": 151.12,
+    "ibja_gold": 13581.02,
+    "ibja_silver": 178.0,
+    "mcx_gold": 13602.5,
+    "lbma_gold_am": 11510.2
+  },
+  "currencies": { "USD": 94.19, "EUR": 109.33 },
+  "timestamps": { "metal": "2026-11-16T02:20:11.000Z", "currency": "2026-11-16T02:19:40.000Z" }
+}

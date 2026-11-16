@@ -1,0 +1,7 @@
+{
+  "status": "failure",
+  "currency": "INR",
+  "unit": "g",
+  "error_code": 1201,
+  "error_message": "Subscription is not active"
+}

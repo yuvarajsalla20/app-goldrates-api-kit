@@ -1,0 +1,63 @@
+{
+  "name": "app-goldrates-api-kit",
+  "version": "1.0.0",
+  "description": "Daily India gold and silver rates (IBJA, via Metals.dev) for Expo + Firebase apps: a 5 AM IST weekday Cloud Function that saves one row a day in Firestore and publishes the rate to Remote Config, plus the app side that reads it with its date and a stale warning. No app words or colors.",
+  "main": "app/index.ts",
+  "types": "app/index.ts",
+  "exports": {
+    ".": "./app/index.ts",
+    "./functions": {
+      "types": "./dist/functions/index.d.ts",
+      "default": "./dist/functions/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "license": "MIT",
+  "files": [
+    "app",
+    "shared",
+    "functions",
+    "dist",
+    "rules"
+  ],
+  "sideEffects": false,
+  "author": "Yuvaraj Salla",
+  "engines": {
+    "node": ">=20"
+  },
+  "peerDependencies": {
+    "firebase-admin": ">=13",
+    "firebase-functions": ">=6",
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "firebase-admin": {
+      "optional": true
+    },
+    "firebase-functions": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.3.0",
+    "firebase": "^12.19.0",
+    "firebase-admin": "^14.5.1",
+    "firebase-functions": "^7.4.0",
+    "react": "^19.3.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.1.0"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p . && tsc -p tsconfig.functions.json --noEmit",
+    "build": "tsc -p tsconfig.functions.json",
+    "check:dist": "npm run build && git diff --exit-code -- dist",
+    "test:emulator": "firebase emulators:exec --only firestore --project demo-goldrates \"vitest run --config emulator-tests/vitest.config.mts\""
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "status": "failure",
+  "currency": "INR",
+  "unit": "g",
+  "error_code": 1202,
+  "error_message": "Account not active"
+}
