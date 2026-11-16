@@ -148,7 +148,7 @@ Every Metals.dev response has `status` (`success` / `failure`). A failure also h
   - the rate the app is showing now and its date
   - how to set a manual rate in `config/goldrates`
 - **Recovery:** when the next run succeeds after a failure, send `✅ Gold rate API working again – <date>`.
-- **How it's sent: 📝 TO DISCUSS with the owner.** Owner prefers doing it inside Firebase with no extra email login. Options: (a) Google Cloud Monitoring alert on a `GOLDRATE_API_FAILED` log entry → built-in email notification (no SMTP needed); (b) Firebase "Trigger Email" extension (needs an SMTP login such as a Gmail app password or SendGrid).
+- **How it's sent: decided 16 Nov 2026: (a) Cloud Monitoring.** Setup steps in [docs/setup.md](docs/setup.md#6-the-failure-email). The options were: Owner prefers doing it inside Firebase with no extra email login. Options: (a) Google Cloud Monitoring alert on a `GOLDRATE_API_FAILED` log entry → built-in email notification (no SMTP needed); (b) Firebase "Trigger Email" extension (needs an SMTP login such as a Gmail app password or SendGrid).
 - If the email itself fails to send, it's logged in Cloud Functions logs, and the rate logic is not affected.
 
 ---
@@ -272,7 +272,7 @@ Then the kit is wired into PAL.
 
 | Item | Options | Status |
 |---|---|---|
-| Failure email: how it is sent | (a) Cloud Monitoring alert on a `GOLDRATE_API_FAILED` log entry, built-in email, no SMTP (recommended); (b) Firebase "Trigger Email" extension with an SMTP login | To discuss |
+| Failure email: how it is sent | Cloud Monitoring alert on the `GOLDRATE_API_FAILED` / `GOLDRATE_API_RECOVERED` log entries, built-in email, no SMTP | **Decided 16 Nov 2026** (steps in [docs/setup.md](docs/setup.md#6-the-failure-email)) |
 | Failure email: address | The owner's address, set as `ALERT_EMAIL` | To confirm |
 | Rate shown in the app | IBJA labelled as IBJA (recommended) / a market rate typed by hand daily / IBJA + an adjustable premium | To decide. IBJA is about 1.3% below shop rates |
 | Metals.dev plan | Free (100 calls/month) or paid ($1.79/month) for commercial use | Free for now; paid before launch if needed |

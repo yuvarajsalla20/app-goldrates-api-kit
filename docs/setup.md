@@ -90,10 +90,18 @@ To go back to the API, set the fields to `null` (or delete the document).
 
 Every failed run writes an `ERROR` log entry `GOLDRATE_API_FAILED`, and the first good run after it writes `GOLDRATE_API_RECOVERED`. Both carry the email `subject` and `text`.
 
-**How the email is sent is still to be decided.** The two options:
+The email is sent by a **Cloud Monitoring log-based alert** (decided 16 Nov 2026). No email login is needed. Set it up once:
 
-- **(a) Cloud Monitoring (recommended, no email login):** Google Cloud console › Logging › Logs Explorer, query `jsonPayload.message="GOLDRATE_API_FAILED"` › **Create alert** › notification channel = your email. Repeat for `GOLDRATE_API_RECOVERED` if you want the recovery email too.
-- **(b) Trigger Email extension:** install the extension (needs an SMTP login), then pass `onAlert` (section 3) that writes `{ to, message: { subject, text } }` to its `mail` collection.
+1. Google Cloud console (project `personal-assests-locker`) › **Monitoring › Alerting › Edit notification channels** › **Email** › add your address.
+2. **Logging › Logs Explorer**, run this query:
+   `resource.type="cloud_run_revision" AND jsonPayload.message="GOLDRATE_API_FAILED"`
+3. **Actions › Create log alert**. Name it `Gold rate API failed`. In the documentation box write: "The daily gold rate job failed. Open the log entry for the error, what to do and the rate the app shows."
+4. Notification frequency: **once per day** (one run a day anyway). Incident autoclose: 1 day. Choose your email channel. Save.
+5. Repeat steps 2–4 with `GOLDRATE_API_RECOVERED` and the name `Gold rate API working again` for the recovery email.
+
+The email links to the log entry, which holds the full `subject` and `text` (error code, what to do, the rate the app is showing, how to set a manual rate).
+
+Another sender is still possible later through `onAlert` (section 3), for example the Trigger Email extension, without changing the kit.
 
 ## 7. The app (Expo)
 
