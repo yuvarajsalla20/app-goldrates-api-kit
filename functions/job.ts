@@ -3,7 +3,7 @@
  * tested without Firebase. `index.ts` wires it to Firestore, Remote Config,
  * the Metals.dev secret and the scheduler.
  */
-import { convertPurities, isPositive, sanityCheck } from '../shared/rates';
+import { NO_PREMIUM, applyPremium, convertPurities, isPositive, sanityCheck, type Premium } from '../shared/rates';
 import { istDate } from '../shared/schedule';
 import type { DailyRate, LatestRate } from '../shared/types';
 import { METALS_DEV_LATEST_URL, MetalsDevError, type MetalsDevRates } from './metalsDev';
@@ -35,6 +35,11 @@ export interface JobDeps {
   now: () => Date;
   readConfig: () => Promise<ManualConfig | null>;
   readLatest: () => Promise<LatestRate | null>;
+  /**
+   * The market premium in effect now (Remote Config), saved on the day's row with
+   * the resulting market prices. Optional: without it the row records 0%.
+   */
+  readPremium?: () => Promise<Premium>;
   /** Calls Metals.dev. Throws {@link MetalsDevError} on failure. */
   fetchRates: () => Promise<MetalsDevRates>;
   /** Creates or replaces `daily_rates/{rate_date}`. */
@@ -97,6 +102,15 @@ export async function runDailyRates(deps: JobDeps): Promise<JobResult> {
     if (problem) throw new MetalsDevError('SANITY', `Sanity check failed: ${problem}`);
 
     const rates = convertPurities(base);
+    let premium: Premium = NO_PREMIUM;
+    if (deps.readPremium) {
+      try {
+        premium = await deps.readPremium();
+      } catch (error) {
+        deps.logError('GOLDRATE_READ_PREMIUM_FAILED', error);
+      }
+    }
+    const market = applyPremium(rates, premium);
     const row: DailyRate = {
       rate_date: runDate,
       ...rates,
@@ -106,6 +120,13 @@ export async function runDailyRates(deps: JobDeps): Promise<JobResult> {
       rate_time: base.rate_time,
       unchanged: !!last && last.gold_24k === rates.gold_24k && last.silver_999 === rates.silver_999,
       created_at: runAt.toISOString(),
+      premium_gold_pct: premium.gold_pct,
+      premium_silver_pct: premium.silver_pct,
+      market_gold_24k: market.gold_24k,
+      market_gold_22k: market.gold_22k,
+      market_gold_18k: market.gold_18k,
+      market_silver_999: market.silver_999,
+      market_silver_925: market.silver_925,
     };
     const latest: LatestRate = { ...row, stale: false, last_error: null, last_attempt_at: runAt.toISOString() };
 

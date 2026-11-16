@@ -1,10 +1,15 @@
 import { type Firestore } from 'firebase-admin/firestore';
 import { type DailyRate, type LatestRate } from '../shared/types';
-import type { Premium } from '../shared/rates';
+import { type Premium } from '../shared/rates';
 import type { ManualConfig } from './job';
 export declare function ensureAdminApp(): void;
 /** Firestore Timestamps → ISO strings. */
 export declare function fromFirestore<T>(data: Record<string, unknown> | undefined): T | null;
+/**
+ * The premium in Remote Config now, for the day's row. A missing or invalid value uses `fallback`
+ * (the app's default), so the row matches what phones show.
+ */
+export declare function readPremiumFromRemoteConfig(fallback?: Premium): Promise<Premium>;
 export declare function firestoreStore(db?: Firestore): {
     readConfig: () => Promise<ManualConfig | null>;
     readLatest: () => Promise<LatestRate | null>;

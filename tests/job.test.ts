@@ -76,6 +76,13 @@ describe('a good run', () => {
       rate_time: '2026-11-16T02:20:11.000Z',
       unchanged: false,
       created_at: RUN_AT.toISOString(),
+      premium_gold_pct: 0,
+      premium_silver_pct: 0,
+      market_gold_24k: 13581.02,
+      market_gold_22k: 12449.72,
+      market_gold_18k: 10185.77,
+      market_silver_999: 178,
+      market_silver_925: 164.65,
     });
     expect(state.latest).toMatchObject({ rate_date: '2026-11-16', stale: false, last_error: null });
     expect(state.published).toEqual([state.latest]);
@@ -102,6 +109,36 @@ describe('a good run', () => {
     expect(result).toMatchObject({ ok: true, recovered: true });
     expect(state.alerts.map((a) => a.kind)).toEqual(['recovered']);
     expect(alertMessage(state.alerts[0]).subject).toBe('✅ Gold rate API working again – 2026-11-16');
+  });
+});
+
+describe('premium on the day\'s row', () => {
+  it('saves the API price, the % and the price with the % added', async () => {
+    const { deps, state } = fakeWorld({ latest: previous() });
+    deps.readPremium = async () => ({ gold_pct: 1.3, silver_pct: 1.3 });
+    await runDailyRates(deps);
+    expect(state.daily.get('2026-11-16')).toMatchObject({
+      gold_24k: 13581.02,
+      silver_999: 178,
+      premium_gold_pct: 1.3,
+      premium_silver_pct: 1.3,
+      market_gold_24k: 13757.57,
+      market_gold_22k: 12611.57,
+      market_gold_18k: 10318.19,
+      market_silver_999: 180.31,
+      market_silver_925: 166.79,
+    });
+    expect(state.latest).toMatchObject({ premium_gold_pct: 1.3, market_gold_24k: 13757.57 });
+  });
+  it('records 0% when the premium cannot be read, and still saves the day', async () => {
+    const { deps, state } = fakeWorld({ latest: previous() });
+    deps.readPremium = async () => {
+      throw new Error('remote config down');
+    };
+    const result = await runDailyRates(deps);
+    expect(result.ok).toBe(true);
+    expect(state.daily.get('2026-11-16')).toMatchObject({ premium_gold_pct: 0, market_gold_24k: 13581.02 });
+    expect(state.errors).toEqual(['GOLDRATE_READ_PREMIUM_FAILED']);
   });
 });
 

@@ -50,6 +50,16 @@ async function runDailyRates(deps) {
         if (problem)
             throw new metalsDev_1.MetalsDevError('SANITY', `Sanity check failed: ${problem}`);
         const rates = (0, rates_1.convertPurities)(base);
+        let premium = rates_1.NO_PREMIUM;
+        if (deps.readPremium) {
+            try {
+                premium = await deps.readPremium();
+            }
+            catch (error) {
+                deps.logError('GOLDRATE_READ_PREMIUM_FAILED', error);
+            }
+        }
+        const market = (0, rates_1.applyPremium)(rates, premium);
         const row = {
             rate_date: runDate,
             ...rates,
@@ -59,6 +69,13 @@ async function runDailyRates(deps) {
             rate_time: base.rate_time,
             unchanged: !!last && last.gold_24k === rates.gold_24k && last.silver_999 === rates.silver_999,
             created_at: runAt.toISOString(),
+            premium_gold_pct: premium.gold_pct,
+            premium_silver_pct: premium.silver_pct,
+            market_gold_24k: market.gold_24k,
+            market_gold_22k: market.gold_22k,
+            market_gold_18k: market.gold_18k,
+            market_silver_999: market.silver_999,
+            market_silver_925: market.silver_925,
         };
         const latest = { ...row, stale: false, last_error: null, last_attempt_at: runAt.toISOString() };
         await deps.saveDaily(row);

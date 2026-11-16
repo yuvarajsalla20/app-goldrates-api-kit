@@ -13,7 +13,7 @@ import {
   type DailyRate,
   type LatestRate,
 } from '../shared/types';
-import type { Premium } from '../shared/rates';
+import { parsePremiumPct, type Premium } from '../shared/rates';
 import type { ManualConfig } from './job';
 
 export function ensureAdminApp() {
@@ -41,6 +41,20 @@ export function fromFirestore<T>(data: Record<string, unknown> | undefined): T |
     if (value && typeof value.toDate === 'function') out[field] = value.toDate().toISOString();
   }
   return out as T;
+}
+
+/**
+ * The premium in Remote Config now, for the day's row. A missing or invalid value uses `fallback`
+ * (the app's default), so the row matches what phones show.
+ */
+export async function readPremiumFromRemoteConfig(fallback: Premium = { gold_pct: 0, silver_pct: 0 }): Promise<Premium> {
+  const template = await getRemoteConfig().getTemplate();
+  const value = (key: string) => {
+    const param = template.parameters[key];
+    const def = param?.defaultValue as { value?: string } | undefined;
+    return def?.value;
+  };
+  return { gold_pct: parsePremiumPct(value(PREMIUM_GOLD_KEY), fallback.gold_pct), silver_pct: parsePremiumPct(value(PREMIUM_SILVER_KEY), fallback.silver_pct) };
 }
 
 export function firestoreStore(db: Firestore = getFirestore()) {

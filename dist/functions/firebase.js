@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ensureAdminApp = ensureAdminApp;
 exports.fromFirestore = fromFirestore;
+exports.readPremiumFromRemoteConfig = readPremiumFromRemoteConfig;
 exports.firestoreStore = firestoreStore;
 exports.publishToRemoteConfig = publishToRemoteConfig;
 /** Firestore and Remote Config adapters for the job (firebase-admin). */
@@ -9,6 +10,7 @@ const app_1 = require("firebase-admin/app");
 const firestore_1 = require("firebase-admin/firestore");
 const remote_config_1 = require("firebase-admin/remote-config");
 const types_1 = require("../shared/types");
+const rates_1 = require("../shared/rates");
 function ensureAdminApp() {
     if ((0, app_1.getApps)().length === 0)
         (0, app_1.initializeApp)();
@@ -35,6 +37,19 @@ function fromFirestore(data) {
             out[field] = value.toDate().toISOString();
     }
     return out;
+}
+/**
+ * The premium in Remote Config now, for the day's row. A missing or invalid value uses `fallback`
+ * (the app's default), so the row matches what phones show.
+ */
+async function readPremiumFromRemoteConfig(fallback = { gold_pct: 0, silver_pct: 0 }) {
+    const template = await (0, remote_config_1.getRemoteConfig)().getTemplate();
+    const value = (key) => {
+        const param = template.parameters[key];
+        const def = param?.defaultValue;
+        return def?.value;
+    };
+    return { gold_pct: (0, rates_1.parsePremiumPct)(value(types_1.PREMIUM_GOLD_KEY), fallback.gold_pct), silver_pct: (0, rates_1.parsePremiumPct)(value(types_1.PREMIUM_SILVER_KEY), fallback.silver_pct) };
 }
 function firestoreStore(db = (0, firestore_1.getFirestore)()) {
     const rates = db.collection(types_1.RATES_COLLECTION);

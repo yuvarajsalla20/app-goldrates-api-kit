@@ -1,3 +1,9 @@
+/**
+ * The daily job's logic, with every outside service passed in, so it can be
+ * tested without Firebase. `index.ts` wires it to Firestore, Remote Config,
+ * the Metals.dev secret and the scheduler.
+ */
+import { type Premium } from '../shared/rates';
 import type { DailyRate, LatestRate } from '../shared/types';
 import { type MetalsDevRates } from './metalsDev';
 /** `config/goldrates`. Empty or null fields mean "use the API". */
@@ -25,6 +31,11 @@ export interface JobDeps {
     now: () => Date;
     readConfig: () => Promise<ManualConfig | null>;
     readLatest: () => Promise<LatestRate | null>;
+    /**
+     * The market premium in effect now (Remote Config), saved on the day's row with
+     * the resulting market prices. Optional: without it the row records 0%.
+     */
+    readPremium?: () => Promise<Premium>;
     /** Calls Metals.dev. Throws {@link MetalsDevError} on failure. */
     fetchRates: () => Promise<MetalsDevRates>;
     /** Creates or replaces `daily_rates/{rate_date}`. */

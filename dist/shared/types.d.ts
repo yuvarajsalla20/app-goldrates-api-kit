@@ -25,6 +25,18 @@ export interface DailyRate extends Rates {
     unchanged: boolean;
     /** When the row was saved (ISO). */
     created_at: string;
+    /**
+     * Market premium (%) in effect when the job saved this row, from Remote Config.
+     * Missing on rows saved before v1.1.0.
+     */
+    premium_gold_pct?: number;
+    premium_silver_pct?: number;
+    /** The API price + the premium (₹/g): `gold_24k × (1 + premium_gold_pct / 100)`, and so on. Missing before v1.1.0. */
+    market_gold_24k?: number;
+    market_gold_22k?: number;
+    market_gold_18k?: number;
+    market_silver_999?: number;
+    market_silver_925?: number;
 }
 /**
  * `daily_rates/latest`, and the JSON in the Remote Config parameter

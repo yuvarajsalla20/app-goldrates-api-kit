@@ -10,7 +10,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { SCHEDULE, TIME_ZONE } from '../shared/schedule';
 import type { Premium } from '../shared/rates';
 import { alertMessage } from './alertMessage';
-import { ensureAdminApp, firestoreStore, publishToRemoteConfig } from './firebase';
+import { ensureAdminApp, firestoreStore, publishToRemoteConfig, readPremiumFromRemoteConfig } from './firebase';
 import { runDailyRates, type RateAlert } from './job';
 import { fetchLatestRates } from './metalsDev';
 
@@ -73,6 +73,7 @@ export function createGoldRatesDaily(options: GoldRatesOptions = {}) {
         now: () => new Date(),
         ...store,
         fetchRates: () => fetchLatestRates(METALS_DEV_API_KEY.value()),
+        readPremium: () => readPremiumFromRemoteConfig(options.premiumDefault),
         publish: (latest) => publishToRemoteConfig(latest, options.premiumDefault),
         alert: async (alert) => {
           const message = alertMessage(alert);
