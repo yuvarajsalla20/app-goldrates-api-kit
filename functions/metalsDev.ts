@@ -42,6 +42,12 @@ export const METALS_DEV_ERRORS: Record<string, { meaning: string; action: string
   },
 };
 
+/** Problems a later retry the same day can fix: network, timeouts, server errors, odd answers, a failed sanity check. */
+export function isTemporary(code: string | null | undefined): boolean {
+  if (!code) return true;
+  return code === 'NETWORK' || code === 'TIMEOUT' || code.startsWith('HTTP_5') || code === 'BAD_RESPONSE' || code === 'SANITY' || code === 'JOB_ERROR' || code === 'UNKNOWN';
+}
+
 /** Why a call failed. `code` is the Metals.dev error code, or one of the kit's own. */
 export class MetalsDevError extends Error {
   constructor(

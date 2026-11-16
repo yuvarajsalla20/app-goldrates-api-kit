@@ -6,6 +6,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MetalsDevError = exports.METALS_DEV_ERRORS = exports.METALS_DEV_LATEST_URL = void 0;
+exports.isTemporary = isTemporary;
 exports.parseLatestResponse = parseLatestResponse;
 exports.fetchLatestRates = fetchLatestRates;
 exports.METALS_DEV_LATEST_URL = 'https://api.metals.dev/v1/latest';
@@ -35,6 +36,12 @@ exports.METALS_DEV_ERRORS = {
         action: 'In config/goldrates set both manual_gold_24k and manual_silver_999, or clear both to use the API.',
     },
 };
+/** Problems a later retry the same day can fix: network, timeouts, server errors, odd answers, a failed sanity check. */
+function isTemporary(code) {
+    if (!code)
+        return true;
+    return code === 'NETWORK' || code === 'TIMEOUT' || code.startsWith('HTTP_5') || code === 'BAD_RESPONSE' || code === 'SANITY' || code === 'JOB_ERROR' || code === 'UNKNOWN';
+}
 /** Why a call failed. `code` is the Metals.dev error code, or one of the kit's own. */
 class MetalsDevError extends Error {
     code;

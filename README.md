@@ -1,7 +1,7 @@
 # app-goldrates-api-kit
 
 Daily **India gold and silver rates** (IBJA benchmark) for Expo + Firebase apps.
-It fetches **once a day at 5:00 AM IST, Monday to Friday**, converts the rates to 24K / 22K / 18K gold and 999 / 925 silver per gram in ₹, stores one row per day, and gives the app a simple way to read the latest rate.
+It fetches **once a day at 5:00 AM IST, Monday to Friday** (retrying up to 3 times, an hour apart, only if that fails), converts the rates to 24K / 22K / 18K gold and 999 / 925 silver per gram in ₹, stores one row per day, and gives the app a simple way to read the latest rate.
 
 > Status: **v1.1.0** (adds the market premium). Setup steps: [docs/setup.md](docs/setup.md). What is still open: [Open decisions](#open-decisions).
 
@@ -76,7 +76,7 @@ Everything else is built into the kit (see [Fixed settings](#fixed-settings)).
 
 Do **not** use `metals.gold` / `metals.silver`. Those are world spot prices, about 15% below Indian rates.
 
-Plan: the free plan gives 100 calls a month, and the kit uses about 22 (one per weekday). Metals.dev's terms link commercial use to an active paid subscription, so move to the paid plan ($1.79/month) if needed. Only the key changes.
+Plan: the free plan gives 100 calls a month. A normal month uses about 22 (one per weekday); even with all 3 retries every day it would be 88. Metals.dev's terms link commercial use to an active paid subscription, so move to the paid plan ($1.79/month) if needed. Only the key changes.
 
 ---
 
@@ -95,12 +95,15 @@ Rounded to 2 decimals (half up), so 18K on 14 Nov 2026 is 13,581.02 × 0.75 = 10
 ## Daily job (Cloud Function)
 
 **Yes, it is a scheduled job.** The kit ships it as a **Firebase scheduled Cloud Function** (Cloud Scheduler runs it):
-- Schedule: `0 5 * * 1-5` with time zone `Asia/Kolkata` (5:00 AM IST, Mon–Fri).
+- Schedule: `0 5-8 * * 1-5` with time zone `Asia/Kolkata`: the 5:00 AM IST run, plus retry slots at 6, 7 and 8 AM (Mon–Fri). One Cloud Scheduler job.
 - Deploy once with `firebase deploy --only functions`. After that it runs by itself, with no server to manage.
-- Needs the Firebase **Blaze (pay-as-you-go)** plan. Cost at this volume is about ₹0: Cloud Scheduler gives 3 free jobs per account, and 22 runs a month is far inside the Functions free tier.
+- Needs the Firebase **Blaze (pay-as-you-go)** plan. Cost at this volume is about ₹0: Cloud Scheduler gives 3 free jobs per account, and about 88 runs a month (most of them retry slots that stop straight away) is far inside the Functions free tier.
 
 
-- Runs **once a day at 5:00 AM IST, Monday to Friday**. **No calls on Saturday or Sunday.** No retries: exactly one call per day.
+- Runs **once a day at 5:00 AM IST, Monday to Friday**. **No calls on Saturday or Sunday.**
+- **Retries, only after a failure (decided 16 Nov 2026):** if the 5 AM run fails, the job tries again at **6, 7 and 8 AM IST**: at most 3 retries, an hour apart. It stops as soon as one succeeds. On a normal day the retry slots wake up, see that today already has a rate, and stop **without calling the API**, so a normal day is still exactly one call.
+  - Only temporary problems are retried: network error, timeout, 5xx, an odd answer, a failed sanity check. Lasting problems (1101 bad key, 1201/1202 account, 1203 quota, 21xx kit bugs) are not retried, because they would fail the same way and use up calls. Exception: if you set a manual rate after the failure, the next retry slot uses it.
+  - A manual "Force run" at any other hour always runs.
 - At 5 AM the API returns the previous working day's IBJA closing rate. `rate_date` is the date the job ran (the day this rate is shown), and `rate_time` keeps the API's own timestamp.
 - Steps:
   1. If a **manual rate** is set in `config/goldrates`, use it (`source = MANUAL`).
@@ -112,7 +115,7 @@ Rounded to 2 decimals (half up), so 18K on 14 Nov 2026 is 13,581.02 × 0.75 = 10
   1. keeps the **previous date's rate** as `latest` (with its original `rate_date`),
   2. sets `stale: true`, `last_error` (e.g. `"1203: quota exceeded"`) and `last_attempt_at`,
   3. still publishes that rate to Remote Config, so the app always has a rate and its date,
-  4. **sends a failure email** (see [Failure email](#failure-email-important)). There's no retry. The next morning's run (or a manual rate) fixes it, and `stale` goes back to `false`.
+  4. **sends a failure email** (see [Failure email](#failure-email-important)). The retries at 6, 7 and 8 AM (or a manual rate, or the next morning's run) fix it, and `stale` goes back to `false`.
 - Backfill of missed weekdays: **only if** a test confirms the timeseries endpoint returns IBJA prices (its docs only show spot gold/silver). Otherwise a missed day simply has no row.
 
 ### Error handling
@@ -130,7 +133,7 @@ Every Metals.dev response has `status` (`success` / `failure`). A failure also h
 | 2103 | Unsupported currency | No retry. Alert (kit bug). |
 | 2104 | Invalid date format (`YYYY-MM-DD`) | No retry. Alert (kit bug). |
 | 2105 | Date range invalid or too long | Split the backfill into ≤30-day chunks. |
-| network / timeout / 5xx | Temporary | No retry. Keep the last rate; the next day's run tries again. |
+| network / timeout / 5xx | Temporary | Keep the last rate. Retried at 6, 7 and 8 AM IST; then the next day's run. |
 
 ---
 
@@ -139,7 +142,7 @@ Every Metals.dev response has `status` (`success` / `failure`). A failure also h
 **Whenever the API call fails, the job sends an email.**
 
 - **To:** the address in config `ALERT_EMAIL` (the owner's own address, set in the Firebase project; it is never written in this repo). *To confirm with the owner.*
-- **When:** every failed run: any error code, network error/timeout, or a failed sanity check (zero or more than a 10% jump). At most one email per day, because there's one run per day.
+- **When:** the 5 AM run fails (any error code, network error/timeout, or a failed sanity check: zero or more than a 10% jump), and again if the last retry at 8 AM also fails. The 6 and 7 AM retries stay quiet. At most two failure emails a day.
 - **Subject:** `⚠️ Gold rate API failed – <date>`
 - **Body:**
   - date and time of the run (IST)
@@ -293,7 +296,7 @@ These are set inside the kit (not inputs):
 | Provider | Metals.dev `/v1/latest` |
 | Currency / unit | INR / gram |
 | Run days and time | Mon–Fri, 5:00 AM IST, once a day |
-| Retries | None |
+| Retries | Only after a temporary failure: 6, 7 and 8 AM IST, stop on success |
 | Sanity limit | ±10% vs last rate |
 | Warning shown | When the rate is not from the latest scheduled run (see App side) |
 | "Rates may be outdated" | After 3 working days without a new rate |

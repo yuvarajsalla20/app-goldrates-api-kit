@@ -13,6 +13,7 @@ Market premium: one % for gold and one for silver, set in Remote Config (`goldra
 - Each `daily_rates` row keeps the real API price and adds `premium_gold_pct`, `premium_silver_pct` and `market_gold_24k` … `market_silver_925` as they were that morning (`JobDeps.readPremium`).
 - New collection `daily_rate_rows`: five rows per day (`{date}_{metal}_{purity}`) with `api_price`, `premium_pct`, `market_price`, saved in the same batch. Rules snippet updated (signed-in read, no writes).
 - The premium is never shown to users (see README).
+- Retries after a failure: schedule `0 5-8 * * 1-5`. The 6, 7 and 8 AM IST slots call the API only if today has no rate yet and the last failure was temporary (or a manual rate has been set); otherwise they stop without a call. Emails on the 5 AM failure, the final 8 AM failure, and on recovery. `latest.last_error_code` added.
 
 ## 1.0.0
 

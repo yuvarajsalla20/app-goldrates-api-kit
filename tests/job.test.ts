@@ -244,3 +244,73 @@ describe('a failed run', () => {
     expect(state.errors).toEqual(['GOLDRATE_REMOTE_CONFIG_FAILED', 'GOLDRATE_ALERT_FAILED']);
   });
 });
+
+describe('retries at 6, 7 and 8 AM IST, only after a failure', () => {
+  const at = (ist: string) => () => new Date(`${ist}+05:30`);
+  const failing = (code: string) => async () => {
+    throw new MetalsDevError(code, 'boom');
+  };
+
+  it('skips without calling the API when today already has a rate', async () => {
+    const { deps, state } = fakeWorld({ latest: previous({ rate_date: '2026-11-16' }) });
+    deps.now = at('2026-11-16T06:00:00');
+    expect(await runDailyRates(deps)).toEqual({ ok: true, skipped: 'today already has a rate' });
+    expect(state.fetchCalls).toBe(0);
+  });
+
+  it('after a temporary 5 AM failure: retries quietly, then succeeds and sends the recovery email', async () => {
+    const world = fakeWorld({ latest: previous(), fetch: failing('NETWORK') });
+    await runDailyRates(world.deps); // 5 AM fails
+    expect(world.state.alerts.map((a) => a.kind)).toEqual(['failed']);
+    expect(world.state.latest).toMatchObject({ stale: true, last_error_code: 'NETWORK' });
+
+    world.deps.now = at('2026-11-16T06:00:00'); // 6 AM, still down: no new email
+    expect(await runDailyRates(world.deps)).toMatchObject({ ok: false });
+    expect(world.state.alerts).toHaveLength(1);
+    expect(world.state.fetchCalls).toBe(2);
+
+    world.deps.now = at('2026-11-16T07:00:00');
+    world.deps.fetchRates = async () => API_RATES; // back up
+    expect(await runDailyRates(world.deps)).toMatchObject({ ok: true, recovered: true });
+    expect(world.state.daily.has('2026-11-16')).toBe(true);
+    expect(world.state.alerts.map((a) => a.kind)).toEqual(['failed', 'recovered']);
+
+    world.deps.now = at('2026-11-16T08:00:00'); // nothing left to do
+    expect(await runDailyRates(world.deps)).toMatchObject({ skipped: 'today already has a rate' });
+    expect(world.state.daily.size).toBe(1);
+  });
+
+  it('emails again if the final 8 AM try fails too', async () => {
+    const world = fakeWorld({ latest: previous(), fetch: failing('HTTP_503') });
+    for (const t of ['2026-11-16T05:00:00', '2026-11-16T06:00:00', '2026-11-16T07:00:00', '2026-11-16T08:00:00']) {
+      world.deps.now = at(t);
+      await runDailyRates(world.deps);
+    }
+    expect(world.state.fetchCalls).toBe(4);
+    expect(world.state.alerts.map((a) => a.runAt)).toEqual(['2026-11-15T23:30:00.000Z', '2026-11-16T02:30:00.000Z']);
+  });
+
+  it('does not retry a lasting problem (bad key, quota), saving API calls', async () => {
+    const world = fakeWorld({ latest: previous(), fetch: failing('1203') });
+    await runDailyRates(world.deps);
+    world.deps.now = at('2026-11-16T06:00:00');
+    expect(await runDailyRates(world.deps)).toMatchObject({ ok: true, skipped: expect.stringMatching(/^not retried: 1203/) });
+    expect(world.state.fetchCalls).toBe(1);
+  });
+
+  it('but does run when a manual rate was set after the failure', async () => {
+    const world = fakeWorld({ latest: previous(), fetch: failing('1203') });
+    await runDailyRates(world.deps);
+    world.deps.readConfig = async () => ({ manual_gold_24k: 13600, manual_silver_999: 179 });
+    world.deps.now = at('2026-11-16T06:00:00');
+    expect(await runDailyRates(world.deps)).toMatchObject({ ok: true, source: 'MANUAL' });
+    expect(world.state.fetchCalls).toBe(1);
+  });
+
+  it('a manual Force run at another hour always runs', async () => {
+    const { deps, state } = fakeWorld({ latest: previous({ rate_date: '2026-11-16' }) });
+    deps.now = at('2026-11-16T12:30:00');
+    expect(await runDailyRates(deps)).toMatchObject({ ok: true, source: 'METALS.DEV' });
+    expect(state.fetchCalls).toBe(1);
+  });
+});

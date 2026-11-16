@@ -50,6 +50,8 @@ export interface LatestRate extends DailyRate {
   stale: boolean;
   /** `"1203: quota exceeded"` style text, or null after a good run. */
   last_error: string | null;
+  /** Just the code of `last_error` (`1203`, `NETWORK`…), so a retry can tell a temporary problem from a lasting one. */
+  last_error_code?: string | null;
   /** When the job last ran (ISO), good or bad. */
   last_attempt_at: string;
 }

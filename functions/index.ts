@@ -83,7 +83,9 @@ export function createGoldRatesDaily(options: GoldRatesOptions = {}) {
         },
         logError: (message, detail) => logger.error(message, { detail: String((detail as Error)?.message ?? detail) }),
       });
-      if (result.ok) {
+      if (result.ok && 'skipped' in result) {
+        logger.info('GOLDRATE_RETRY_SKIPPED', { reason: result.skipped });
+      } else if (result.ok) {
         logger.info('GOLDRATE_SAVED', { rate_date: result.row.rate_date, source: result.source, gold_24k: result.row.gold_24k, silver_999: result.row.silver_999 });
       }
     },

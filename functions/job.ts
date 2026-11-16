@@ -4,9 +4,9 @@
  * the Metals.dev secret and the scheduler.
  */
 import { NO_PREMIUM, applyPremium, convertPurities, isPositive, sanityCheck, type Premium } from '../shared/rates';
-import { istDate } from '../shared/schedule';
+import { istDate, runKind } from '../shared/schedule';
 import type { DailyRate, LatestRate } from '../shared/types';
-import { METALS_DEV_LATEST_URL, MetalsDevError, type MetalsDevRates } from './metalsDev';
+import { METALS_DEV_LATEST_URL, MetalsDevError, isTemporary, type MetalsDevRates } from './metalsDev';
 
 /** `config/goldrates`. Empty or null fields mean "use the API". */
 export interface ManualConfig {
@@ -55,6 +55,7 @@ export interface JobDeps {
 }
 
 export type JobResult =
+  | { ok: true; skipped: string }
   | { ok: true; source: DailyRate['source']; row: DailyRate; recovered: boolean }
   | { ok: false; error: string; showing: LatestRate | null };
 
@@ -76,10 +77,18 @@ function manualRates(config: ManualConfig | null, last: LatestRate | null): Meta
   return { gold_24k: gold, silver_999: silver, usd_inr: usd, rate_time: null };
 }
 
-/** One run of the 5 AM job. Never throws: every problem ends in the result and the logs. */
+/**
+ * One run of the job. Never throws: every problem ends in the result and the logs.
+ *
+ * The 5 AM run (and any manual "Force run") always runs. A retry slot (6, 7 and 8 AM IST) runs only when today
+ * has no good rate yet and the last failure was temporary, or a manual rate has been set since; otherwise it is
+ * skipped without calling the API. Emails: on the 5 AM failure, on the final (8 AM) failure, and when a run
+ * succeeds after a failure.
+ */
 export async function runDailyRates(deps: JobDeps): Promise<JobResult> {
   const runAt = deps.now();
   const runDate = istDate(runAt);
+  const kind = runKind(runAt);
   let last: LatestRate | null = null;
   try {
     last = await deps.readLatest();
@@ -87,13 +96,21 @@ export async function runDailyRates(deps: JobDeps): Promise<JobResult> {
     deps.logError('GOLDRATE_READ_LATEST_FAILED', error);
   }
 
+  let config: ManualConfig | null = null;
   try {
-    let config: ManualConfig | null = null;
-    try {
-      config = await deps.readConfig();
-    } catch (error) {
-      deps.logError('GOLDRATE_READ_CONFIG_FAILED', error);
-    }
+    config = await deps.readConfig();
+  } catch (error) {
+    deps.logError('GOLDRATE_READ_CONFIG_FAILED', error);
+  }
+
+  if (kind !== 'first') {
+    if (last && last.rate_date === runDate && !last.stale) return { ok: true, skipped: 'today already has a rate' };
+    const manualSet = !!config && (isSet(config.manual_gold_24k) || isSet(config.manual_silver_999));
+    if (last && !last.stale) return { ok: true, skipped: 'no failed run to retry today' };
+    if (last && !manualSet && !isTemporary(last.last_error_code)) return { ok: true, skipped: `not retried: ${last.last_error}` };
+  }
+
+  try {
     const manual = manualRates(config, last);
     const base = manual ?? (await deps.fetchRates());
     const source: DailyRate['source'] = manual ? 'MANUAL' : 'METALS.DEV';
@@ -128,7 +145,7 @@ export async function runDailyRates(deps: JobDeps): Promise<JobResult> {
       market_silver_999: market.silver_999,
       market_silver_925: market.silver_925,
     };
-    const latest: LatestRate = { ...row, stale: false, last_error: null, last_attempt_at: runAt.toISOString() };
+    const latest: LatestRate = { ...row, stale: false, last_error: null, last_error_code: null, last_attempt_at: runAt.toISOString() };
 
     await deps.saveDaily(row);
     await deps.saveLatest(latest);
@@ -144,7 +161,7 @@ export async function runDailyRates(deps: JobDeps): Promise<JobResult> {
     let showing: LatestRate | null = null;
     if (last && isPositive(last.gold_24k)) {
       // Keep the previous rate with its own date, marked stale.
-      showing = { ...last, stale: true, last_error: errorText, last_attempt_at: runAt.toISOString() };
+      showing = { ...last, stale: true, last_error: errorText, last_error_code: failure.code, last_attempt_at: runAt.toISOString() };
       try {
         await deps.saveLatest(showing);
       } catch (saveError) {
@@ -152,7 +169,8 @@ export async function runDailyRates(deps: JobDeps): Promise<JobResult> {
       }
       await safePublish(deps, showing);
     }
-    await safeAlert(deps, {
+    // A retry that fails again stays quiet; the 5 AM failure and the day's final try send the email.
+    if (kind !== 'retry') await safeAlert(deps, {
       kind: 'failed',
       runDate,
       runAt: runAt.toISOString(),

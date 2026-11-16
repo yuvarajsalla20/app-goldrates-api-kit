@@ -24,10 +24,18 @@ function manualRates(config, last) {
     const usd = (0, rates_1.isPositive)(config.manual_usd_inr) ? config.manual_usd_inr : (last?.usd_inr ?? null);
     return { gold_24k: gold, silver_999: silver, usd_inr: usd, rate_time: null };
 }
-/** One run of the 5 AM job. Never throws: every problem ends in the result and the logs. */
+/**
+ * One run of the job. Never throws: every problem ends in the result and the logs.
+ *
+ * The 5 AM run (and any manual "Force run") always runs. A retry slot (6, 7 and 8 AM IST) runs only when today
+ * has no good rate yet and the last failure was temporary, or a manual rate has been set since; otherwise it is
+ * skipped without calling the API. Emails: on the 5 AM failure, on the final (8 AM) failure, and when a run
+ * succeeds after a failure.
+ */
 async function runDailyRates(deps) {
     const runAt = deps.now();
     const runDate = (0, schedule_1.istDate)(runAt);
+    const kind = (0, schedule_1.runKind)(runAt);
     let last = null;
     try {
         last = await deps.readLatest();
@@ -35,14 +43,23 @@ async function runDailyRates(deps) {
     catch (error) {
         deps.logError('GOLDRATE_READ_LATEST_FAILED', error);
     }
+    let config = null;
     try {
-        let config = null;
-        try {
-            config = await deps.readConfig();
-        }
-        catch (error) {
-            deps.logError('GOLDRATE_READ_CONFIG_FAILED', error);
-        }
+        config = await deps.readConfig();
+    }
+    catch (error) {
+        deps.logError('GOLDRATE_READ_CONFIG_FAILED', error);
+    }
+    if (kind !== 'first') {
+        if (last && last.rate_date === runDate && !last.stale)
+            return { ok: true, skipped: 'today already has a rate' };
+        const manualSet = !!config && (isSet(config.manual_gold_24k) || isSet(config.manual_silver_999));
+        if (last && !last.stale)
+            return { ok: true, skipped: 'no failed run to retry today' };
+        if (last && !manualSet && !(0, metalsDev_1.isTemporary)(last.last_error_code))
+            return { ok: true, skipped: `not retried: ${last.last_error}` };
+    }
+    try {
         const manual = manualRates(config, last);
         const base = manual ?? (await deps.fetchRates());
         const source = manual ? 'MANUAL' : 'METALS.DEV';
@@ -77,7 +94,7 @@ async function runDailyRates(deps) {
             market_silver_999: market.silver_999,
             market_silver_925: market.silver_925,
         };
-        const latest = { ...row, stale: false, last_error: null, last_attempt_at: runAt.toISOString() };
+        const latest = { ...row, stale: false, last_error: null, last_error_code: null, last_attempt_at: runAt.toISOString() };
         await deps.saveDaily(row);
         await deps.saveLatest(latest);
         await safePublish(deps, latest);
@@ -92,7 +109,7 @@ async function runDailyRates(deps) {
         let showing = null;
         if (last && (0, rates_1.isPositive)(last.gold_24k)) {
             // Keep the previous rate with its own date, marked stale.
-            showing = { ...last, stale: true, last_error: errorText, last_attempt_at: runAt.toISOString() };
+            showing = { ...last, stale: true, last_error: errorText, last_error_code: failure.code, last_attempt_at: runAt.toISOString() };
             try {
                 await deps.saveLatest(showing);
             }
@@ -101,14 +118,16 @@ async function runDailyRates(deps) {
             }
             await safePublish(deps, showing);
         }
-        await safeAlert(deps, {
-            kind: 'failed',
-            runDate,
-            runAt: runAt.toISOString(),
-            error: errorText,
-            action: failure.action,
-            showing,
-        });
+        // A retry that fails again stays quiet; the 5 AM failure and the day's final try send the email.
+        if (kind !== 'retry')
+            await safeAlert(deps, {
+                kind: 'failed',
+                runDate,
+                runAt: runAt.toISOString(),
+                error: errorText,
+                action: failure.action,
+                showing,
+            });
         return { ok: false, error: errorText, showing };
     }
 }
