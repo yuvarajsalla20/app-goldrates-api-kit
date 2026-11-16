@@ -67,4 +67,4 @@ export declare function parsePremiumPct(value: unknown, fallback?: number): numb
  * The same rates with the premium added to every purity, rounded to 2
  * decimals. Every other field (date, source, usd_inr…) is kept as it is.
  */
-export declare function applyPremium<T extends Rates>(rates: T, premium: Premium | null | undefined): T;
+export declare function applyPremium<T extends Omit<Rates, 'usd_inr'>>(rates: T, premium: Premium | null | undefined): T;

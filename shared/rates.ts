@@ -125,7 +125,7 @@ export function parsePremiumPct(value: unknown, fallback = 0): number {
  * The same rates with the premium added to every purity, rounded to 2
  * decimals. Every other field (date, source, usd_inr…) is kept as it is.
  */
-export function applyPremium<T extends Rates>(rates: T, premium: Premium | null | undefined): T {
+export function applyPremium<T extends Omit<Rates, 'usd_inr'>>(rates: T, premium: Premium | null | undefined): T {
   if (!hasPremium(premium)) return rates;
   const gold = 1 + premium.gold_pct / 100;
   const silver = 1 + premium.silver_pct / 100;
