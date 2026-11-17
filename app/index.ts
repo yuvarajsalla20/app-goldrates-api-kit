@@ -31,4 +31,4 @@ export { PURITY_ROWS_COLLECTION, purityRowId, toPurityRows, type PurityRateRow }
 export { getRatesForDate, type ReadDoc } from './history';
 export { premiumFromValues, rnFirebaseSource, type RateSource, type RnFirebaseRemoteConfigLike, type RnFirebaseSourceOptions } from './source';
 export { parseLatest, rateStatus, type RateState, type RateStatus } from './status';
-export { useGoldRates } from './useGoldRates';
+export { sameStatus, useGoldRates } from './useGoldRates';

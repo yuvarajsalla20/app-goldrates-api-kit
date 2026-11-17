@@ -116,3 +116,22 @@ describe('getRatesForDate', () => {
     await expect(getRatesForDate(async () => null, '14 Nov')).rejects.toThrow(/YYYY-MM-DD/);
   });
 });
+
+describe('sameStatus', () => {
+  it('keeps the old status when only the clock moved within the same state', async () => {
+    const { sameStatus } = await import('../app');
+    const l = latest('2026-11-16');
+    const a = rateStatus(l, ist('2026-11-16T10:00:00'));
+    const b = rateStatus(l, ist('2026-11-16T10:01:00'));
+    expect(a).not.toBe(b);
+    expect(sameStatus(a, b)).toBe(true);
+  });
+  it('sees a change of state, rate or premium', async () => {
+    const { sameStatus } = await import('../app');
+    const l = latest('2026-11-13');
+    const a = rateStatus(l, ist('2026-11-13T10:00:00'));
+    expect(sameStatus(a, rateStatus(l, ist('2026-11-18T10:00:00')))).toBe(false);
+    expect(sameStatus(a, rateStatus(latest('2026-11-13'), ist('2026-11-13T10:00:00')))).toBe(false);
+    expect(sameStatus(a, rateStatus(l, ist('2026-11-13T10:00:00'), { gold_pct: 1.3, silver_pct: 1.3 }))).toBe(false);
+  });
+});
