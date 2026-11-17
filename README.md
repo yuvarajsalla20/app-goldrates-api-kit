@@ -3,7 +3,7 @@
 Daily **India gold and silver rates** (IBJA benchmark) for Expo + Firebase apps.
 It fetches **once a day at 5:00 AM IST, Monday to Friday** (retrying up to 3 times, an hour apart, only if that fails), converts the rates to 24K / 22K / 18K gold and 999 / 925 silver per gram in ₹, stores one row per day, and gives the app a simple way to read the latest rate.
 
-> Status: **v1.1.0** (adds the market premium). Setup steps: [docs/setup.md](docs/setup.md). What is still open: [Open decisions](#open-decisions).
+> Status: **v1.2.0** (steadier `useGoldRates`; v1.1.0 added the market premium). Setup steps: [docs/setup.md](docs/setup.md). What is still open: [Open decisions](#open-decisions).
 
 Part of the shared kits:
 [app-core-kit](https://github.com/yuvarajsalla20/app-core-kit) ·

@@ -1,6 +1,6 @@
 {
   "name": "app-goldrates-api-kit",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Daily India gold and silver rates (IBJA, via Metals.dev) for Expo + Firebase apps: a 5 AM IST weekday Cloud Function that saves one row a day in Firestore and publishes the rate to Remote Config, plus the app side that reads it with its date and a stale warning. No app words or colors.",
   "main": "app/index.ts",
   "types": "app/index.ts",

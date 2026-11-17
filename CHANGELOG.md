@@ -2,6 +2,14 @@
 
 Release notes for app-goldrates-api-kit, newest first. Each version is tagged in git (`v1.0.0`).
 
+## 1.2.0
+
+Fewer redraws in apps. No change in what is shown; nothing to change in an app.
+
+- `useGoldRates` returns the same object while nothing it shows changes. Before, the 60-second date re-check and every Remote Config fetch returned a new status (and a new `rates` object) even for the same rate, so every screen reading it redrew once a minute.
+- It keeps the stored text and parses it only when it changes.
+- New `sameStatus(a, b)` helper.
+
 ## 1.1.0
 
 Market premium: one % for gold and one for silver, set in Remote Config (`goldrates_premium_gold_pct`, `goldrates_premium_silver_pct`) and applied to every user's values. Change it in the Firebase console, no deployment. The premium is never shown to users.
